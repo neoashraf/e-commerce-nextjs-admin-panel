@@ -62,6 +62,11 @@ export const createCategoryResultSchema = z.object({
   is_published: z.boolean().optional(),
 });
 
+export const ATTRIBUTE_TYPES = [
+  "text", "textarea", "select", "multiselect", "boolean", "number",
+  "decimal", "date", "datetime", "price", "image", "file", "url",
+] as const;
+
 export const attributeRowSchema = z.object({
   id: z.string(),
   code: z.string(),
@@ -70,6 +75,28 @@ export const attributeRowSchema = z.object({
   is_filterable: z.boolean().optional(),
   is_configurable: z.boolean().optional(),
   is_required: z.boolean().optional(),
+  is_unique: z.boolean().optional(),
+  is_visible_on_front: z.boolean().optional(),
+  is_comparable: z.boolean().optional(),
+  is_user_defined: z.boolean().optional(),
+  created_at: z.string().optional(),
 });
 export type AttributeRow = z.infer<typeof attributeRowSchema>;
 export const attributeListSchema = z.array(attributeRowSchema);
+
+export const attributeOptionSchema = z.object({
+  id: z.string().optional(),
+  label: z.string(),
+  value: z.string(),
+  swatch: z.string().nullable().optional(),
+  position: z.number().optional(),
+});
+export type AttributeOption = z.infer<typeof attributeOptionSchema>;
+
+export const attributeDetailSchema = attributeRowSchema.extend({
+  validation: z.string().nullable().optional(),
+  options: z.array(attributeOptionSchema).default([]),
+});
+export type AttributeDetail = z.infer<typeof attributeDetailSchema>;
+
+export const createAttributeResultSchema = z.object({ id: z.string(), code: z.string().optional() });

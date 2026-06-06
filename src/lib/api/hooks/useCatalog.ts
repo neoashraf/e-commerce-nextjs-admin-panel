@@ -7,9 +7,13 @@ import {
   categoryDetailSchema,
   createCategoryResultSchema,
   attributeListSchema,
+  attributeDetailSchema,
+  createAttributeResultSchema,
   type CategoryNode,
   type CategoryDetail,
   type AttributeRow,
+  type AttributeDetail,
+  type AttributeOption,
 } from "@/lib/api/schemas/catalog";
 
 /**
@@ -104,5 +108,70 @@ export function useDeleteCategory() {
   return useMutation({
     mutationFn: (id: string) => api.delete<void>(`/admin/categories/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-categories"] }),
+  });
+}
+
+// ---- Attributes (catalog-attributes-fe) ----
+
+export function useAttributes(params: Record<string, string | number | boolean | undefined>) {
+  const qs = JSON.stringify(params);
+  return useQuery({
+    queryKey: ["admin-attributes", qs] as const,
+    queryFn: (): Promise<AttributeRow[]> =>
+      api.get("/admin/attributes", { schema: attributeListSchema, params }) as Promise<AttributeRow[]>,
+    staleTime: 30_000,
+  });
+}
+
+export function useAttribute(id: string) {
+  return useQuery({
+    queryKey: ["admin-attribute", id] as const,
+    enabled: !!id,
+    queryFn: (): Promise<AttributeDetail> =>
+      api.get(`/admin/attributes/${id}`, { schema: attributeDetailSchema }) as Promise<AttributeDetail>,
+    staleTime: 30_000,
+  });
+}
+
+export interface AttributeBody {
+  admin_label: string;
+  code?: string;
+  type?: string;
+  is_required?: boolean;
+  is_unique?: boolean;
+  is_filterable?: boolean;
+  is_configurable?: boolean;
+  is_visible_on_front?: boolean;
+  is_comparable?: boolean;
+  validation?: string | null;
+  options?: AttributeOption[];
+}
+
+export function useCreateAttribute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AttributeBody) =>
+      api.post("/admin/attributes", body as unknown as Record<string, unknown>, { schema: createAttributeResultSchema }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
+  });
+}
+
+export function useUpdateAttribute(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    // code is immutable — never sent on edit (the caller omits it).
+    mutationFn: (body: Omit<AttributeBody, "code" | "type">) => api.patch(`/admin/attributes/${id}`, body as unknown as Record<string, unknown>),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-attribute", id] });
+    },
+  });
+}
+
+export function useDeleteAttribute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(`/admin/attributes/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
   });
 }

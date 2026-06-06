@@ -32,6 +32,8 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Products", href: "/admin/products", permission: "catalog.product.read" },
       { label: "Categories", href: "/admin/categories", permission: "catalog.category.read" },
+      { label: "Attributes", href: "/admin/attributes", permission: "catalog.attribute.read" },
+      { label: "Attribute Families", href: "/admin/attribute-families", permission: "catalog.attribute.read" },
       { label: "Inventory", href: "/admin/inventory", permission: "inventory.stock.read" },
     ],
   },

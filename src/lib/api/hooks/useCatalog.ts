@@ -9,11 +9,17 @@ import {
   attributeListSchema,
   attributeDetailSchema,
   createAttributeResultSchema,
+  familyListSchema,
+  familyDetailSchema,
+  createFamilyResultSchema,
   type CategoryNode,
   type CategoryDetail,
   type AttributeRow,
   type AttributeDetail,
   type AttributeOption,
+  type FamilyRow,
+  type FamilyDetail,
+  type FamilyGroup,
 } from "@/lib/api/schemas/catalog";
 
 /**
@@ -173,5 +179,61 @@ export function useDeleteAttribute() {
   return useMutation({
     mutationFn: (id: string) => api.delete<void>(`/admin/attributes/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
+  });
+}
+
+// ---- Attribute families (catalog-attribute-families-fe) ----
+
+export function useFamilies() {
+  return useQuery({
+    queryKey: ["admin-families"] as const,
+    queryFn: (): Promise<FamilyRow[]> =>
+      api.get("/admin/attribute-families", { schema: familyListSchema }) as Promise<FamilyRow[]>,
+    staleTime: 60_000,
+  });
+}
+
+export function useFamily(id: string) {
+  return useQuery({
+    queryKey: ["admin-family", id] as const,
+    enabled: !!id,
+    queryFn: (): Promise<FamilyDetail> =>
+      api.get(`/admin/attribute-families/${id}`, { schema: familyDetailSchema }) as Promise<FamilyDetail>,
+    staleTime: 30_000,
+  });
+}
+
+interface FamilyBody {
+  code?: string;
+  name: string;
+  groups: FamilyGroup[];
+}
+
+export function useCreateFamily() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: FamilyBody) =>
+      api.post("/admin/attribute-families", body as unknown as Record<string, unknown>, { schema: createFamilyResultSchema }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-families"] }),
+  });
+}
+
+export function useUpdateFamily(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Omit<FamilyBody, "code">) =>
+      api.patch(`/admin/attribute-families/${id}`, body as unknown as Record<string, unknown>),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-families"] });
+      qc.invalidateQueries({ queryKey: ["admin-family", id] });
+    },
+  });
+}
+
+export function useDeleteFamily() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(`/admin/attribute-families/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-families"] }),
   });
 }

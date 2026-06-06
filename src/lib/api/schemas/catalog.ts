@@ -100,3 +100,36 @@ export const attributeDetailSchema = attributeRowSchema.extend({
 export type AttributeDetail = z.infer<typeof attributeDetailSchema>;
 
 export const createAttributeResultSchema = z.object({ id: z.string(), code: z.string().optional() });
+
+// ---- Attribute families ----
+
+export const familyRowSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  name: z.string(),
+  is_default: z.boolean().optional(),
+});
+export type FamilyRow = z.infer<typeof familyRowSchema>;
+export const familyListSchema = z.array(familyRowSchema);
+
+export const familyGroupSchema = z.object({
+  name: z.string(),
+  column: z.number().default(1),
+  position: z.number().default(1),
+  attribute_codes: z.array(z.string()).default([]),
+});
+export type FamilyGroup = z.infer<typeof familyGroupSchema>;
+
+export const familyDetailSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  name: z.string(),
+  is_default: z.boolean().optional(),
+  groups: z.array(familyGroupSchema).default([]),
+});
+export type FamilyDetail = z.infer<typeof familyDetailSchema>;
+
+export const createFamilyResultSchema = z.object({ id: z.string(), code: z.string().optional() });
+
+/** The six mandatory system attributes that can never leave a family. */
+export const MANDATORY_ATTRIBUTE_CODES = ["sku", "name", "url_key", "price", "status", "description"];

@@ -61,6 +61,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Admin Users", href: "/admin/users", permission: "rbac.admin_user.read" },
       { label: "Roles", href: "/admin/roles", permission: "rbac.role.read" },
+      { label: "Audit Log", href: "/admin/audit", permission: "rbac.audit.read" },
     ],
   },
 ];

@@ -154,3 +154,42 @@ export const productRowSchema = z.object({
 });
 export type ProductRow = z.infer<typeof productRowSchema>;
 export const productListSchema = z.array(productRowSchema);
+
+export const productVariantSchema = z.object({
+  id: z.string(),
+  sku_code: z.string(),
+  options: z.record(z.string()).default({}),
+  price: z.string().nullable().optional(),
+  image: z.string().nullable().optional(),
+  is_enabled: z.boolean().default(true),
+});
+export type ProductVariant = z.infer<typeof productVariantSchema>;
+
+export const productDetailSchema = z.object({
+  id: z.string(),
+  type: z.enum(["simple", "configurable"]).default("simple"),
+  family: z.string().nullable().optional(),
+  family_id: z.string().nullable().optional(),
+  name: z.string(),
+  slug: z.string().optional(),
+  sku: z.string().optional(),
+  brand: z.string().nullable().optional(),
+  short_description: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  base_price: z.string().optional(),
+  sale_price: z.string().nullable().optional(),
+  sale_starts_at: z.string().nullable().optional(),
+  sale_ends_at: z.string().nullable().optional(),
+  is_featured: z.boolean().default(false),
+  is_new: z.boolean().default(false),
+  status: productStatusSchema.default("draft"),
+  primary_category_id: z.string().nullable().optional(),
+  meta_title: z.string().nullable().optional(),
+  meta_description: z.string().nullable().optional(),
+  variants: z.array(productVariantSchema).default([]),
+  updated_at: z.string().optional(),
+});
+export type ProductDetail = z.infer<typeof productDetailSchema>;
+
+export const createProductResultSchema = z.object({ id: z.string(), slug: z.string().optional(), type: z.string().optional(), status: z.string().optional() });
+export const generateVariantsResultSchema = z.object({ variants_created: z.number().optional(), variants: z.array(productVariantSchema).default([]) });

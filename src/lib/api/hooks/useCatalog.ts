@@ -268,3 +268,49 @@ export function useDeleteProduct() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
   });
 }
+
+// ---- Product editor (catalog-product-editor-fe) ----
+import {
+  productDetailSchema as _pds,
+  createProductResultSchema as _cprs,
+  generateVariantsResultSchema as _gvrs,
+  type ProductDetail as _PD,
+} from "@/lib/api/schemas/catalog";
+
+export function useProduct(id: string) {
+  return useQuery({
+    queryKey: ["admin-product", id] as const,
+    enabled: !!id,
+    queryFn: (): Promise<_PD> => api.get(`/admin/products/${id}`, { schema: _pds }) as Promise<_PD>,
+    staleTime: 15_000,
+  });
+}
+export function useCreateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.post("/admin/products", body, { schema: _cprs }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+  });
+}
+export function useUpdateProduct(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.patch(`/admin/products/${id}`, body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-products"] }); qc.invalidateQueries({ queryKey: ["admin-product", id] }); },
+  });
+}
+export function useGenerateVariants(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { configurable_attributes: Array<{ code: string; option_ids: string[] }> }) =>
+      api.post(`/admin/products/${id}/variants`, body, { schema: _gvrs }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", id] }),
+  });
+}
+export function useUpdateVariant(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ variantId, body }: { variantId: string; body: Record<string, unknown> }) => api.patch(`/admin/variants/${variantId}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}

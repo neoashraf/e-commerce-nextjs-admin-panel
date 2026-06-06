@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   loginSchema,
   twoFaSchema,
@@ -23,8 +24,13 @@ import {
  */
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const login = useAdminLogin();
   const verify = useAdminTwoFaVerify();
+
+  // Where to go after a successful sign-in (the shell guard sets ?next= on redirect).
+  const next = searchParams.get("next") || "/admin/dashboard";
+  const justReset = searchParams.get("reset") === "1";
 
   // null = credentials step; set = 2FA challenge in progress.
   const [challengeId, setChallengeId] = useState<string | null>(null);
@@ -47,7 +53,7 @@ export function LoginForm() {
         if ("twofa_required" in result) {
           setChallengeId(result.challenge_id);
         } else {
-          router.replace("/admin/dashboard");
+          router.replace(next);
         }
       },
       onError: (err) => {
@@ -62,7 +68,7 @@ export function LoginForm() {
     verify.mutate(
       { challenge_id: challengeId, code: data.code },
       {
-        onSuccess: () => router.replace("/admin/dashboard"),
+        onSuccess: () => router.replace(next),
         onError: (err) => setFormError(mapApiErrorsToForm(err, codeForm.setError)),
       },
     );
@@ -78,6 +84,12 @@ export function LoginForm() {
           ? "Enter the verification code sent to you."
           : "Sign in to the Sports E-Commerce admin panel."}
       </p>
+
+      {justReset && !formError && (
+        <p role="status" className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+          Your password has been reset. Sign in with your new password.
+        </p>
+      )}
 
       {formError && (
         <p
@@ -107,6 +119,12 @@ export function LoginForm() {
             register={credForm.register("password")}
           />
           <SubmitButton pending={pending} idle="Sign in" busy="Signing in…" />
+          <Link
+            href="/forgot-password"
+            className="block text-center text-sm font-medium text-brand-700 hover:underline"
+          >
+            Forgot your password?
+          </Link>
         </form>
       ) : (
         <form onSubmit={onVerify} className="mt-5 space-y-4" noValidate>

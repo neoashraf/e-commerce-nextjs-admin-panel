@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
+import { PermissionBoundary } from "@/components/shell/PermissionBoundary";
 
 /**
  * Admin shell layout: fixed sidebar rail on md+, slide-over drawer on mobile,
@@ -36,7 +37,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 p-4 md:p-6">
+          <PermissionBoundary>{children}</PermissionBoundary>
+        </main>
       </div>
     </div>
   );

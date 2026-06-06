@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useTemplates, useCreateTemplate, useUpdateTemplate, type TemplateRow } from "@/lib/api/hooks/useNotif";
 import { Can } from "@/lib/permissions/Can";
@@ -39,7 +40,10 @@ export function TemplatesView() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">Notification templates</h1>
-        <Can permission="notifications.template.create"><button type="button" onClick={() => setAdding((a) => !a)} className="text-sm font-medium text-brand-700 hover:underline">+ New template</button></Can>
+        <div className="flex items-center gap-3">
+          <Can permission="notifications.campaign.send"><Link href="/admin/notifications/campaigns/new" className="text-sm font-medium text-brand-700 hover:underline">New campaign</Link></Can>
+          <Can permission="notifications.template.create"><button type="button" onClick={() => setAdding((a) => !a)} className="text-sm font-medium text-brand-700 hover:underline">+ New template</button></Can>
+        </div>
       </div>
 
       {error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useInventory, useReceiveStock, useAdjustStock, useEditThreshold } from "@/lib/api/hooks/useInventory";
@@ -46,7 +47,12 @@ export function InventoryView() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-gray-900">Stock</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">Stock</h1>
+        <Can permission="inventory.stock.adjust">
+          <Link href="/admin/inventory/bulk" className="inline-flex h-10 items-center rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">Bulk import</Link>
+        </Can>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <input className={inp + " w-64"} placeholder="Search SKU or product…" defaultValue={q} onKeyDown={(e) => e.key === "Enter" && setParam("q", (e.target as HTMLInputElement).value)} />
@@ -97,6 +103,7 @@ export function InventoryView() {
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => setStockTarget(r)} className="text-sm font-medium text-brand-700 hover:underline">Receive / Adjust</button>
                       <button type="button" onClick={() => setThresholdTarget(r)} className="text-sm font-medium text-gray-500 hover:underline">Threshold</button>
+                      <Link href={`/admin/inventory/${r.variant_id}/movements`} className="text-sm font-medium text-gray-500 hover:underline">Movements</Link>
                     </div>
                   </Can>
                 </td>

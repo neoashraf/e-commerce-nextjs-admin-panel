@@ -49,7 +49,9 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Marketing",
     items: [
       { label: "Promotions", href: "/admin/promotions", permission: "promotions.coupon.read" },
-      { label: "Content", href: "/admin/content", permission: "content.page.read" },
+      { label: "Pages", href: "/admin/content/pages", permission: "content.page.manage" },
+      { label: "Menus", href: "/admin/content/menus", permission: "content.menu.manage" },
+      { label: "Merchandising", href: "/admin/content/merchandising", permission: "content.banner.manage" },
     ],
   },
   {

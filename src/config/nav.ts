@@ -61,11 +61,21 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Notifications",
+    items: [
+      { label: "Templates", href: "/admin/notifications", permission: "notifications.template.read" },
+      { label: "Delivery Log", href: "/admin/notifications/log", permission: "notifications.log.read" },
+    ],
+  },
+  {
     title: "Settings",
     items: [
       { label: "Admin Users", href: "/admin/users", permission: "rbac.admin_user.read" },
       { label: "Roles", href: "/admin/roles", permission: "rbac.role.read" },
       { label: "Audit Log", href: "/admin/audit", permission: "rbac.audit.read" },
+      { label: "Delivery", href: "/admin/settings/delivery", permission: "cart.settings.manage" },
+      { label: "Payments", href: "/admin/settings/payments", permission: "payments.settings.manage" },
+      { label: "Notifications", href: "/admin/settings/notifications", permission: "notifications.settings.manage" },
     ],
   },
 ];

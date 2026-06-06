@@ -12,6 +12,8 @@ import {
   familyListSchema,
   familyDetailSchema,
   createFamilyResultSchema,
+  productListSchema,
+  type ProductRow,
   type CategoryNode,
   type CategoryDetail,
   type AttributeRow,
@@ -235,5 +237,34 @@ export function useDeleteFamily() {
   return useMutation({
     mutationFn: (id: string) => api.delete<void>(`/admin/attribute-families/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-families"] }),
+  });
+}
+
+// ---- Products (catalog-products-list-fe) ----
+
+export function useProducts(params: Record<string, string | number | boolean | undefined>) {
+  const qs = JSON.stringify(params);
+  return useQuery({
+    queryKey: ["admin-products", qs] as const,
+    queryFn: (): Promise<ProductRow[]> =>
+      api.get("/admin/products", { schema: productListSchema, params }) as Promise<ProductRow[]>,
+    staleTime: 20_000,
+  });
+}
+
+export function useProductStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "published" | "archived" | "draft" }) =>
+      api.patch(`/admin/products/${id}/status`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+  });
+}
+
+export function useDeleteProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(`/admin/products/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
   });
 }

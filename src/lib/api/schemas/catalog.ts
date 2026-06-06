@@ -133,3 +133,24 @@ export const createFamilyResultSchema = z.object({ id: z.string(), code: z.strin
 
 /** The six mandatory system attributes that can never leave a family. */
 export const MANDATORY_ATTRIBUTE_CODES = ["sku", "name", "url_key", "price", "status", "description"];
+
+// ---- Products (admin list) ----
+
+export const productStatusSchema = z.enum(["draft", "published", "archived"]);
+export type ProductStatus = z.infer<typeof productStatusSchema>;
+
+export const productRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string().optional(),
+  sku: z.string().optional(),
+  type: z.enum(["simple", "configurable"]).optional(),
+  family: z.string().nullable().optional(),
+  primary_image: z.string().nullable().optional(),
+  base_price: z.string().optional(),
+  status: productStatusSchema.default("draft"),
+  primary_category: z.string().nullable().optional(),
+  qty: z.number().nullable().optional(),
+});
+export type ProductRow = z.infer<typeof productRowSchema>;
+export const productListSchema = z.array(productRowSchema);

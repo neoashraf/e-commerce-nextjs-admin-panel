@@ -41,6 +41,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Sales",
     items: [
       { label: "Orders", href: "/admin/orders", permission: "orders.order.read" },
+      { label: "Exchanges", href: "/admin/exchanges", permission: "orders.exchange.read" },
       { label: "Customers", href: "/admin/customers", permission: "customers.customer.read" },
       { label: "Leads", href: "/admin/leads", permission: "leads.lead.read" },
     ],

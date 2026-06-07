@@ -1,0 +1,17 @@
+# Local orchestration for the admin panel.
+# The backend is expected to run separately (or be reachable at NEXT_PUBLIC_API_URL).
+#
+#   docker compose up --build
+#
+# Listens on 3002 to avoid clashing with the backend (3001) and storefront (3000).
+# NEXT_PUBLIC_* are baked at build time, so changing them requires a rebuild.
+services:
+  admin:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+    image: sports-ecom/admin:local
+    ports:
+      - "3002:3002"
+    restart: unless-stopped

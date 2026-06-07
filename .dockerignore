@@ -1,0 +1,29 @@
+# Dependencies & build artifacts (reinstalled/rebuilt inside the image)
+node_modules
+.next
+out
+build
+
+# Local env — never bake secrets into the image
+.env
+.env.local
+.env.*.local
+
+# VCS & tooling
+.git
+.gitignore
+*.tsbuildinfo
+.idea
+.vscode
+
+# Docker / CI
+Dockerfile
+.dockerignore
+.github
+
+# OS / misc
+.DS_Store
+Thumbs.db
+npm-debug.log*
+pnpm-debug.log*
+readme.md

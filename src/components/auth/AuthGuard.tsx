@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useAdminMe } from "@/lib/api/hooks/useAuth";
 
@@ -13,6 +13,7 @@ import { useAdminMe } from "@/lib/api/hooks/useAuth";
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const hydrated = useAuthStore((s) => s.hydrated);
   const tokens = useAuthStore((s) => s.tokens);
 
@@ -20,8 +21,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useAdminMe();
 
   useEffect(() => {
-    if (hydrated && !tokens) router.replace("/login");
-  }, [hydrated, tokens, router]);
+    if (hydrated && !tokens) {
+      // Preserve where the admin was headed so login can return them there.
+      const next = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname)}` : "";
+      router.replace(`/login${next}`);
+    }
+  }, [hydrated, tokens, router, pathname]);
 
   if (!hydrated) {
     return (

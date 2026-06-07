@@ -49,3 +49,13 @@ export const twoFaVerifySchema = z.object({
   }),
   tokens: tokensSchema,
 });
+
+/**
+ * POST /admin/auth/password/forgot and /reset (FR-RBAC-007). Both return a
+ * generic message; forgot is anti-enumeration (always 200). Reset errors:
+ * 410 (token expired/used), 400 (weak password).
+ */
+export const messageResultSchema = z.object({
+  message: z.string().optional(),
+});
+export type MessageResult = z.infer<typeof messageResultSchema>;

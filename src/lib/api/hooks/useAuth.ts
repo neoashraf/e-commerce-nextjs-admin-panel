@@ -6,6 +6,7 @@ import {
   adminUserSchema,
   loginResultSchema,
   twoFaVerifySchema,
+  messageResultSchema,
   type LoginResult,
 } from "@/lib/api/schemas/auth";
 import { useAuthStore, type AdminUser } from "@/lib/stores/auth";
@@ -107,5 +108,27 @@ export function useAdminLogout() {
       clear();
       qc.clear();
     },
+  });
+}
+
+/** POST /admin/auth/password/forgot — always a generic success (anti-enumeration). */
+export function useAdminForgotPassword() {
+  return useMutation({
+    mutationFn: (email: string) =>
+      api.post("/admin/auth/password/forgot", { email }, {
+        public: true,
+        schema: messageResultSchema,
+      }),
+  });
+}
+
+/** POST /admin/auth/password/reset — set a new password from the email token. */
+export function useAdminResetPassword() {
+  return useMutation({
+    mutationFn: (body: { token: string; new_password: string }) =>
+      api.post("/admin/auth/password/reset", body, {
+        public: true,
+        schema: messageResultSchema,
+      }),
   });
 }

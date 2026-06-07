@@ -1,0 +1,3 @@
+# Keeps the public/ directory present so the Docker build's
+# `COPY /app/public ./public` step has a source. Static assets
+# (favicon, images) live here.

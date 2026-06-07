@@ -32,6 +32,8 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Products", href: "/admin/products", permission: "catalog.product.read" },
       { label: "Categories", href: "/admin/categories", permission: "catalog.category.read" },
+      { label: "Attributes", href: "/admin/attributes", permission: "catalog.attribute.read" },
+      { label: "Attribute Families", href: "/admin/attribute-families", permission: "catalog.attribute.read" },
       { label: "Inventory", href: "/admin/inventory", permission: "inventory.stock.read" },
     ],
   },
@@ -39,6 +41,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Sales",
     items: [
       { label: "Orders", href: "/admin/orders", permission: "orders.order.read" },
+      { label: "Exchanges", href: "/admin/exchanges", permission: "orders.exchange.read" },
       { label: "Customers", href: "/admin/customers", permission: "customers.customer.read" },
       { label: "Leads", href: "/admin/leads", permission: "leads.lead.read" },
     ],
@@ -47,7 +50,9 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Marketing",
     items: [
       { label: "Promotions", href: "/admin/promotions", permission: "promotions.coupon.read" },
-      { label: "Content", href: "/admin/content", permission: "content.page.read" },
+      { label: "Pages", href: "/admin/content/pages", permission: "content.page.manage" },
+      { label: "Menus", href: "/admin/content/menus", permission: "content.menu.manage" },
+      { label: "Merchandising", href: "/admin/content/merchandising", permission: "content.banner.manage" },
     ],
   },
   {
@@ -57,10 +62,21 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Notifications",
+    items: [
+      { label: "Templates", href: "/admin/notifications", permission: "notifications.template.read" },
+      { label: "Delivery Log", href: "/admin/notifications/log", permission: "notifications.log.read" },
+    ],
+  },
+  {
     title: "Settings",
     items: [
       { label: "Admin Users", href: "/admin/users", permission: "rbac.admin_user.read" },
       { label: "Roles", href: "/admin/roles", permission: "rbac.role.read" },
+      { label: "Audit Log", href: "/admin/audit", permission: "rbac.audit.read" },
+      { label: "Delivery", href: "/admin/settings/delivery", permission: "cart.settings.manage" },
+      { label: "Payments", href: "/admin/settings/payments", permission: "payments.settings.manage" },
+      { label: "Notifications", href: "/admin/settings/notifications", permission: "notifications.settings.manage" },
     ],
   },
 ];

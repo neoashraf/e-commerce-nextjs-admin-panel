@@ -15,6 +15,21 @@ export const adminUserSchema = z.object({
 });
 export type AdminUserDto = z.infer<typeof adminUserSchema>;
 
+/**
+ * The `admin` object returned by the auth endpoints (login / 2fa verify) is a
+ * lighter projection than the full profile: per docs/api-contracts/16-rbac.md,
+ * login returns `{ id, full_name, role }` and 2fa/verify returns `{ id, role }`.
+ * The full profile (full_name, email, permissions) is hydrated by GET /admin/me.
+ */
+export const authAdminSchema = z.object({
+  id: z.string(),
+  role: z.string(),
+  full_name: z.string().optional(),
+  email: z.string().email().optional(),
+  permissions: z.array(z.string()).optional(),
+});
+export type AuthAdminDto = z.infer<typeof authAdminSchema>;
+
 export const tokensSchema = z.object({
   access_token: z.string(),
   refresh_token: z.string(),
@@ -34,19 +49,17 @@ export const loginResultSchema = z.union([
     expires_in: z.number(),
   }),
   z.object({
-    admin: adminUserSchema.partial({ permissions: true }).extend({
-      // login returns a lighter admin; full permissions come from GET /admin/me
-      permissions: z.array(z.string()).optional(),
-    }),
+    // login returns a lighter admin ({ id, full_name, role }); the full profile
+    // (email, permissions) comes from GET /admin/me.
+    admin: authAdminSchema,
     tokens: tokensSchema,
   }),
 ]);
 export type LoginResult = z.infer<typeof loginResultSchema>;
 
 export const twoFaVerifySchema = z.object({
-  admin: adminUserSchema.partial({ permissions: true }).extend({
-    permissions: z.array(z.string()).optional(),
-  }),
+  // 2fa/verify returns the minimal admin ({ id, role }); full profile from GET /admin/me.
+  admin: authAdminSchema,
   tokens: tokensSchema,
 });
 

@@ -101,7 +101,7 @@ export function LoginForm() {
       )}
 
       {!challengeId ? (
-        <form onSubmit={onCredentials} className="mt-5 space-y-4" noValidate>
+        <form key="credentials" onSubmit={onCredentials} className="mt-5 space-y-4" noValidate>
           <Field
             id="email"
             label="Email"
@@ -127,7 +127,7 @@ export function LoginForm() {
           </Link>
         </form>
       ) : (
-        <form onSubmit={onVerify} className="mt-5 space-y-4" noValidate>
+        <form key="twofa" onSubmit={onVerify} className="mt-5 space-y-4" noValidate>
           <Field
             id="code"
             label="Verification code"
@@ -143,6 +143,7 @@ export function LoginForm() {
             onClick={() => {
               setChallengeId(null);
               setFormError(null);
+              codeForm.reset({ code: "" });
             }}
             className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
           >

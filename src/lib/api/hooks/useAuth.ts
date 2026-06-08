@@ -50,11 +50,13 @@ export function useAdminLogin() {
       }),
     onSuccess: (result) => {
       if ("tokens" in result) {
+        // The auth response carries a lighter admin (no email/permissions); the
+        // full profile is hydrated immediately after by useAdminMe().
         setSession(
           {
             id: result.admin.id,
-            full_name: result.admin.full_name,
-            email: result.admin.email,
+            full_name: result.admin.full_name ?? "",
+            email: result.admin.email ?? "",
             role: result.admin.role,
             permissions: result.admin.permissions ?? [],
           },
@@ -80,11 +82,13 @@ export function useAdminTwoFaVerify() {
         schema: twoFaVerifySchema,
       }),
     onSuccess: (result) => {
+      // 2fa/verify returns the minimal admin ({ id, role }); full_name, email,
+      // and permissions are hydrated immediately after by useAdminMe().
       setSession(
         {
           id: result.admin.id,
-          full_name: result.admin.full_name,
-          email: result.admin.email,
+          full_name: result.admin.full_name ?? "",
+          email: result.admin.email ?? "",
           role: result.admin.role,
           permissions: result.admin.permissions ?? [],
         },

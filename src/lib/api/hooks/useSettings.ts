@@ -55,18 +55,42 @@ export function useSavePaymentSettings() {
 }
 
 // ---- Notification settings (notif-settings-fe) ----
-const notifSettingsSchema = z.record(z.unknown());
+// Contract: GET/PUT /admin/notification-settings returns { sms, email } channel
+// configs (docs/api-contracts/09-notifications.md → Provider Settings). GET never
+// returns raw credentials — only the `credentials_ref` pointer. Fields are
+// nullable until a provider is configured.
+export const smsSettingsSchema = z.object({
+  provider_name: z.string().nullable().default(null),
+  masked_sender_id: z.string().nullable().default(null),
+  non_masking_sender: z.string().nullable().default(null),
+  credentials_ref: z.string().nullable().default(null),
+  quiet_hours_start: z.string().nullable().default(null),
+  quiet_hours_end: z.string().nullable().default(null),
+});
+export const emailSettingsSchema = z.object({
+  provider_name: z.string().nullable().default(null),
+  transactional_from: z.string().nullable().default(null),
+  credentials_ref: z.string().nullable().default(null),
+});
+const notifSettingsSchema = z.object({
+  sms: smsSettingsSchema.default({}),
+  email: emailSettingsSchema.default({}),
+});
+export type SmsSettings = z.infer<typeof smsSettingsSchema>;
+export type EmailSettings = z.infer<typeof emailSettingsSchema>;
+export type NotifSettings = z.infer<typeof notifSettingsSchema>;
+
 export function useNotifSettings() {
   return useQuery({
     queryKey: ["admin-notif-settings"] as const,
-    queryFn: (): Promise<Record<string, unknown>> => api.get("/admin/notification-settings", { schema: notifSettingsSchema }) as Promise<Record<string, unknown>>,
+    queryFn: (): Promise<NotifSettings> => api.get("/admin/notification-settings", { schema: notifSettingsSchema }) as Promise<NotifSettings>,
     staleTime: 60_000,
   });
 }
 export function useSaveNotifSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Record<string, unknown>) => api.put("/admin/notification-settings", body),
+    mutationFn: (body: NotifSettings) => api.put("/admin/notification-settings", body as unknown as Record<string, unknown>),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-notif-settings"] }),
   });
 }

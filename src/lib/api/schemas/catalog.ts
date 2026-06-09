@@ -112,6 +112,7 @@ export const familyRowSchema = z.object({
 export type FamilyRow = z.infer<typeof familyRowSchema>;
 export const familyListSchema = z.array(familyRowSchema);
 
+/** Outbound shape we SEND on create/update — groups carry a flat list of codes. */
 export const familyGroupSchema = z.object({
   name: z.string(),
   column: z.number().default(1),
@@ -120,12 +121,36 @@ export const familyGroupSchema = z.object({
 });
 export type FamilyGroup = z.infer<typeof familyGroupSchema>;
 
+/**
+ * Inbound group shape the BE RETURNS on family-detail: each group carries an
+ * `attributes` array of objects ({ code, admin_label, … }), NOT a flat
+ * `attribute_codes` string list. We map it down to `attribute_codes` so the
+ * editor's group canvas keeps working off codes. (Tolerates either shape.)
+ */
+const familyGroupDetailSchema = z
+  .object({
+    name: z.string(),
+    column: z.number().catch(1),
+    position: z.number().catch(1),
+    attributes: z
+      .array(z.object({ code: z.string() }))
+      .optional(),
+    attribute_codes: z.array(z.string()).optional(),
+  })
+  .transform((g) => ({
+    name: g.name,
+    column: g.column,
+    position: g.position,
+    attribute_codes:
+      g.attribute_codes ?? (g.attributes ?? []).map((a) => a.code),
+  }));
+
 export const familyDetailSchema = z.object({
   id: z.string(),
   code: z.string(),
   name: z.string(),
   is_default: z.boolean().optional(),
-  groups: z.array(familyGroupSchema).default([]),
+  groups: z.array(familyGroupDetailSchema).default([]),
 });
 export type FamilyDetail = z.infer<typeof familyDetailSchema>;
 

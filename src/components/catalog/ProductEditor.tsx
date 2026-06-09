@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useCreateProduct, useUpdateProduct, useProductStatus, useFamilies, useFilterableAttributes } from "@/lib/api/hooks/useCatalog";
-import type { ProductDetail } from "@/lib/api/schemas/catalog";
+import { useCreateProduct, useUpdateProduct, useProductStatus, useFamilies, useFilterableAttributes, useCategoryTree } from "@/lib/api/hooks/useCatalog";
+import type { ProductDetail, CategoryNode } from "@/lib/api/schemas/catalog";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
 import { VariantMatrix } from "./VariantMatrix";
@@ -31,6 +31,7 @@ export function ProductEditor({
   const statusM = useProductStatus();
   const { data: families } = useFamilies();
   const { data: attributes } = useFilterableAttributes();
+  const { data: categoryTree } = useCategoryTree();
 
   const type = product?.type ?? initial?.type ?? "simple";
   const familyId = product?.family_id ?? initial?.family_id ?? "";
@@ -47,6 +48,7 @@ export function ProductEditor({
   const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? false);
   const [isNew, setIsNew] = useState(product?.is_new ?? false);
   const [metaTitle, setMetaTitle] = useState(product?.meta_title ?? "");
+  const [primaryCategoryId, setPrimaryCategoryId] = useState(product?.primary_category_id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [publishErrors, setPublishErrors] = useState<string[]>([]);
   const [stale, setStale] = useState(false);
@@ -55,9 +57,21 @@ export function ProductEditor({
   const field = "h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
   const familyLabel = families?.find((f) => f.id === familyId)?.name ?? familyId;
 
+  // Flatten the nested category tree into indented options for the primary-category select.
+  const categoryOptions: { id: string; label: string }[] = [];
+  const walkCategories = (nodes: CategoryNode[], depth: number) => {
+    for (const node of nodes) {
+      if (node.is_deleted) continue;
+      categoryOptions.push({ id: node.id, label: `${"— ".repeat(depth)}${node.name}` });
+      if (node.children?.length) walkCategories(node.children, depth + 1);
+    }
+  };
+  if (categoryTree) walkCategories(categoryTree, 0);
+
   function buildBody(): Record<string, unknown> {
     return {
       type, family_id: familyId || undefined,
+      primary_category_id: primaryCategoryId || undefined,
       name: name.trim(), brand: brand.trim() || undefined,
       short_description: shortDesc.trim() || undefined, description: description.trim() || undefined,
       base_price: basePrice || undefined,
@@ -73,6 +87,7 @@ export function ProductEditor({
     e.preventDefault();
     setError(null);
     if (name.trim().length < 2) { setError("Name must be at least 2 characters."); return; }
+    if (!primaryCategoryId) { setError("Select a primary category."); return; }
     if (salePrice && basePrice && Number(salePrice) >= Number(basePrice)) { setError("Sale price must be less than the base price."); return; }
     try {
       if (mode === "create") {
@@ -141,6 +156,13 @@ export function ProductEditor({
           <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">SKU {skuLocked && <span className="text-gray-400">(locked)</span>}</span><input className={field + (skuLocked ? " bg-gray-50 text-gray-500" : "")} value={sku} onChange={(e) => setSku(e.target.value)} readOnly={skuLocked} /></label>
           <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Brand</span><input className={field} value={brand} onChange={(e) => setBrand(e.target.value)} /></label>
         </div>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-gray-900">Primary category *</span>
+          <select className={field} value={primaryCategoryId} onChange={(e) => setPrimaryCategoryId(e.target.value)} required>
+            <option value="" disabled>Select a category…</option>
+            {categoryOptions.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </label>
         {product?.slug && <p className="text-xs text-gray-400">URL key: /{product.slug} (generated from the name)</p>}
         <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Short description</span><input className={field} value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} /></label>
         <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Description</span><textarea className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} /></label>

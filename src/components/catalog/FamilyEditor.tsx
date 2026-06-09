@@ -20,7 +20,8 @@ export function FamilyEditor({ mode, family }: { mode: "create" | "edit"; family
   const router = useRouter();
   const create = useCreateFamily();
   const update = useUpdateFamily(family?.id ?? "");
-  const { data: allAttributes } = useAttributes({ page: 1, limit: 300 });
+  // BE caps `limit` at 200 (list-attributes-query.dto.ts @Max(200)); 300 → 400 VALIDATION_ERROR.
+  const { data: allAttributes } = useAttributes({ page: 1, limit: 200 });
 
   const [code, setCode] = useState(family?.code ?? "");
   const [name, setName] = useState(family?.name ?? "");

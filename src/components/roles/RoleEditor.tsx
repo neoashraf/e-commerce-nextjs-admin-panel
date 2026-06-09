@@ -161,7 +161,7 @@ export function RoleEditor({
       )}
 
       {/* Sticky save bar */}
-      <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+      <div className="mt-2">
         <div className="mx-auto flex max-w-5xl items-center justify-end gap-3">
           <button type="button" onClick={() => router.push("/admin/roles")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
           <button

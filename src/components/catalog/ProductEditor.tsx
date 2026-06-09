@@ -185,11 +185,9 @@ export function ProductEditor({
         </section>
       )}
 
-      <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
-        <div className="mx-auto flex max-w-3xl items-center justify-end gap-3">
-          <button type="button" onClick={() => router.push("/admin/products")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
-          <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{pending ? "Saving…" : "Save product"}</button>
-        </div>
+      <div className="mt-2 flex items-center justify-end gap-3">
+        <button type="button" onClick={() => router.push("/admin/products")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
+        <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{pending ? "Saving…" : "Save product"}</button>
       </div>
     </form>
   );

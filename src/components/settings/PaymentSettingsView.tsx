@@ -57,7 +57,7 @@ export function PaymentSettingsView() {
         )}
 
       <Can permission="payments.settings.manage">
-        <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+        <div className="mt-2">
           <div className="mx-auto flex max-w-5xl items-center justify-end"><button type="button" onClick={() => save.mutate(settings, { onSuccess: () => toast("Payment settings saved.") })} disabled={save.isPending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{save.isPending ? "Saving…" : "Save payment settings"}</button></div>
         </div>
       </Can>

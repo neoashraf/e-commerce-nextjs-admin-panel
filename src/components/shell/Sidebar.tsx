@@ -21,7 +21,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     permissions.length === 0 || permissions.includes(perm);
 
   return (
-    <nav className="flex h-full flex-col gap-6 overflow-y-auto p-4">
+    <nav className="no-scrollbar flex h-full flex-col gap-6 overflow-y-auto p-4">
       <div className="px-2 text-lg font-semibold text-gray-900">
         Sports Admin
       </div>

@@ -141,9 +141,79 @@ async function request<T>(
   return data as T;
 }
 
+/**
+ * Multipart POST for file uploads (e.g. product images). Unlike `request`, this
+ * sends a `FormData` body and lets the browser set the `multipart/form-data`
+ * boundary itself — so we deliberately do NOT set Content-Type. Reuses the same
+ * auth header, error-envelope parsing, and optional Zod unwrap as `request`.
+ */
+async function requestForm<T>(
+  path: string,
+  form: FormData,
+  opts: RequestOptions<T> = {},
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (!opts.public) {
+    const token = getAccessToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, opts.params), {
+      method: "POST",
+      headers,
+      body: form,
+      signal: opts.signal,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "NETWORK_ERROR", "Could not reach the server.", []);
+  }
+
+  if (res.status === 204) return undefined as T;
+  if (res.status === 401 && !opts.public) useAuthStore.getState().clear();
+
+  let payload: unknown;
+  try {
+    payload = await res.json();
+  } catch {
+    if (res.ok) return undefined as T;
+    throw new ApiError(res.status, "BAD_RESPONSE", res.statusText || "Request failed.");
+  }
+
+  if (!res.ok) {
+    const parsed = errorEnvelopeSchema.safeParse(payload);
+    if (parsed.success) {
+      const { code, message, details } = parsed.data.error;
+      throw new ApiError(res.status, code, message, (details as ApiErrorDetail[]) ?? []);
+    }
+    throw new ApiError(res.status, "UNKNOWN", res.statusText || "Request failed.");
+  }
+
+  const env_ = envelopeSchema.safeParse(payload);
+  const data = env_.success ? env_.data.data : payload;
+
+  if (opts.schema) {
+    const valid = opts.schema.safeParse(data);
+    if (!valid.success) {
+      throw new ApiError(
+        res.status,
+        "CONTRACT_MISMATCH",
+        `Response did not match expected shape for POST ${path}.`,
+      );
+    }
+    return valid.data;
+  }
+
+  return data as T;
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions<T>) =>
     request<T>("GET", path, undefined, opts),
+  postForm: <T>(path: string, form: FormData, opts?: RequestOptions<T>) =>
+    requestForm<T>(path, form, opts),
   post: <T>(path: string, body?: Json, opts?: RequestOptions<T>) =>
     request<T>("POST", path, body, opts),
   patch: <T>(path: string, body?: Json, opts?: RequestOptions<T>) =>

@@ -209,12 +209,46 @@ export const productDetailSchema = z.object({
   is_new: z.boolean().default(false),
   status: productStatusSchema.default("draft"),
   primary_category_id: z.string().nullable().optional(),
+  primary_image_id: z.string().nullable().optional(),
   meta_title: z.string().nullable().optional(),
   meta_description: z.string().nullable().optional(),
+  // EAV attribute values keyed by attribute code (text/number = string, boolean,
+  // multiselect = string[]). The editor's family-driven inputs read/write this.
+  attributes: z.record(z.unknown()).default({}),
   variants: z.array(productVariantSchema).default([]),
   updated_at: z.string().optional(),
 });
 export type ProductDetail = z.infer<typeof productDetailSchema>;
+
+/** `{ id, renditions }` returned by POST /admin/products/{id}/images. */
+export const uploadImageResultSchema = z.object({
+  id: z.string(),
+  renditions: z.record(z.string()).default({}),
+});
+
+// ---- Family detail for the product editor (attribute inputs) ----
+
+/** One attribute within a family group, as the editor needs to render its input. */
+export const familyAttributeSchema = z.object({
+  code: z.string(),
+  admin_label: z.string(),
+  type: z.string(),
+});
+export type FamilyAttribute = z.infer<typeof familyAttributeSchema>;
+
+const editorFamilyGroupSchema = z.object({
+  name: z.string(),
+  attributes: z.array(familyAttributeSchema).default([]),
+});
+
+/** Family detail reshaped for the editor: groups → their attribute lists. */
+export const editorFamilyDetailSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  name: z.string(),
+  groups: z.array(editorFamilyGroupSchema).default([]),
+});
+export type EditorFamilyDetail = z.infer<typeof editorFamilyDetailSchema>;
 
 export const createProductResultSchema = z.object({ id: z.string(), slug: z.string().optional(), type: z.string().optional(), status: z.string().optional() });
 export const generateVariantsResultSchema = z.object({ variants_created: z.number().optional(), variants: z.array(productVariantSchema).default([]) });

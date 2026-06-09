@@ -58,7 +58,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Insights",
     items: [
-      { label: "Reports", href: "/admin/reports", permission: "reports.view" },
+      { label: "Reports", href: "/admin/reports", permission: "reports.report.view" },
     ],
   },
   {

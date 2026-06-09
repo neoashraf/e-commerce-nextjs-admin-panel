@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { ApiError, type ApiErrorDetail } from "@/lib/api/errors";
-import { getAccessToken } from "@/lib/stores/auth";
+import { getAccessToken, useAuthStore } from "@/lib/stores/auth";
 
 /**
  * Thin fetch wrapper — the single place that knows the request shape
@@ -15,8 +15,12 @@ import { getAccessToken } from "@/lib/stores/auth";
 type Json = Record<string, unknown> | unknown[] | null;
 
 interface RequestOptions<T> {
-  /** Zod schema for the `data` field of the response envelope. */
-  schema?: z.ZodType<T>;
+  /**
+   * Zod schema for the `data` field of the response envelope. Input is `unknown`
+   * (raw parsed JSON) and `T` is the OUTPUT, so transforming schemas — e.g. ones
+   * that rename contract fields (`customer_id` → `id`) — are accepted.
+   */
+  schema?: z.ZodType<T, z.ZodTypeDef, unknown>;
   /** Query params appended to the URL. */
   params?: Record<string, string | number | boolean | undefined | null>;
   /** Skip attaching the auth token (for /admin/auth/* public endpoints). */
@@ -86,6 +90,14 @@ async function request<T>(
 
   // 204 No Content — nothing to parse; return undefined as T.
   if (res.status === 204) return undefined as T;
+
+  // Session expired / token revoked on an authenticated request: the token we
+  // hold is dead, so clear it. AuthGuard reacts to `tokens` going null and
+  // redirects to /login. Public endpoints (login, password reset) can return
+  // 401 for bad credentials — those must NOT wipe a session.
+  if (res.status === 401 && !opts.public) {
+    useAuthStore.getState().clear();
+  }
 
   let payload: unknown;
   try {

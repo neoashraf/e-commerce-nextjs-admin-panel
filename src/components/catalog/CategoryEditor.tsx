@@ -99,7 +99,7 @@ export function CategoryEditor({
   const pending = create.isPending || update.isPending;
 
   return (
-    <form onSubmit={onSave} className="max-w-3xl space-y-6 pb-24">
+    <form onSubmit={onSave} className="max-w-3xl space-y-6">
       <h1 className="text-xl font-bold text-gray-900">{mode === "create" ? "New category" : `Edit ${category?.name}`}</h1>
 
       {error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -202,7 +202,7 @@ export function CategoryEditor({
       </section>
 
       {/* Sticky save bar */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:pl-72">
+      <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
         <div className="mx-auto flex max-w-3xl items-center justify-end gap-3">
           <button type="button" onClick={() => router.push("/admin/categories")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
           <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">

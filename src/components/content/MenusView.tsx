@@ -39,7 +39,7 @@ export function MenusView() {
   }
 
   return (
-    <div className="space-y-5 pb-24">
+    <div className="space-y-5">
       <h1 className="text-xl font-bold text-gray-900">Menus</h1>
 
       <div className="inline-flex rounded-md border border-gray-300 p-0.5 text-sm">
@@ -62,7 +62,7 @@ export function MenusView() {
         )}
 
       <Can permission="content.menu.manage">
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:pl-72">
+        <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
           <div className="mx-auto flex max-w-5xl items-center justify-end">
             <button type="button" onClick={onSave} disabled={save.isPending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{save.isPending ? "Saving…" : `Save ${menu} menu`}</button>
           </div>

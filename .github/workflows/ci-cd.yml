@@ -114,39 +114,73 @@ jobs:
         run: |
           echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
+      - name: Validate VPS secrets
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USE }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_HOST" ]; then
+            echo "ERROR: VPS_HOST secret is missing"
+            exit 1
+          fi
+
+          if [ -z "$VPS_USER" ]; then
+            echo "ERROR: VPS_USE secret is missing"
+            exit 1
+          fi
+
+          if [ -z "$VPS_SSH_KEY" ]; then
+            echo "ERROR: VPS_SSH_KEY secret is missing"
+            exit 1
+          fi
+
+          echo "VPS secrets are set"
+
       - name: Deploy latest Admin Panel image on server
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USE }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
           CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
+
           NEXT_PUBLIC_API_URL: ${{ env.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_SITE_URL: ${{ env.NEXT_PUBLIC_SITE_URL }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "
-            set -e
+          echo "Connecting to $VPS_USER@$VPS_HOST"
+          echo "Deploying image: $IMAGE_NAME:latest"
 
-            echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            "$VPS_USER@$VPS_HOST" "
+              set -e
 
-            docker pull '$IMAGE_NAME:latest'
+              echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin
 
-            docker rm -f '$CONTAINER_NAME' || true
+              docker pull '$IMAGE_NAME:latest'
 
-            docker run -d \
-              --name '$CONTAINER_NAME' \
-              -p 6002:3002 \
-              -e NEXT_PUBLIC_API_URL='$NEXT_PUBLIC_API_URL' \
-              -e NEXT_PUBLIC_SITE_URL='$NEXT_PUBLIC_SITE_URL' \
-              --restart unless-stopped \
-              '$IMAGE_NAME:latest'
+              docker rm -f '$CONTAINER_NAME' || true
 
-            docker image prune -f
+              docker run -d \
+                --name '$CONTAINER_NAME' \
+                -p 6002:3002 \
+                -e NEXT_PUBLIC_API_URL='$NEXT_PUBLIC_API_URL' \
+                -e NEXT_PUBLIC_SITE_URL='$NEXT_PUBLIC_SITE_URL' \
+                --restart unless-stopped \
+                '$IMAGE_NAME:latest'
 
-            docker ps | grep '$CONTAINER_NAME'
-          "
+              docker image prune -f
+
+              docker ps | grep '$CONTAINER_NAME'
+            "

@@ -6,6 +6,7 @@ import type { Banner, HomeSection } from "@/lib/api/schemas/content";
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
+import { resolveMediaUrl } from "@/lib/media";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 /**
@@ -66,7 +67,7 @@ function BannersPanel() {
               <li key={b.id} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm">
                 <span className="h-10 w-16 shrink-0 overflow-hidden rounded bg-gray-100">{b.image_url && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={b.image_url} alt="" className="h-full w-full object-cover" />)}</span>
+                  <img src={resolveMediaUrl(b.image_url)} alt="" className="h-full w-full object-cover" />)}</span>
                 <span className="min-w-0 flex-1 truncate text-gray-700">{b.alt_text || b.image_url}</span>
                 <Can permission="content.banner.manage">
                   <button type="button" onClick={() => actions.update.mutate({ id: b.id, body: { is_active: !b.is_active } })} className={"text-sm font-medium " + (b.is_active ? "text-amber-700" : "text-green-700")}>{b.is_active ? "Deactivate" : "Activate"}</button>

@@ -1,32 +1,45 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUploadProductImage } from "@/lib/api/hooks/useCatalog";
+import type { AdminProductImage } from "@/lib/api/schemas/catalog";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
+import { pickRendition } from "@/lib/media";
 
 /**
- * Product image upload (FR-CAT-030/031/032). Upload-only: the admin API supports
- * POST /admin/products/{id}/images (with is_primary) but has no list/delete/
- * reorder endpoints yet, so this clears the `no_primary_image` publish blocker
- * but can't show or manage an existing gallery. A full gallery is flagged for BE.
- *
- * `hasPrimary` is driven by the parent (product.primary_image_id) so the UI shows
- * whether the publish requirement is already met.
+ * Product image upload + gallery (FR-CAT-030/031/032). Uploads via
+ * POST /admin/products/{id}/images (with is_primary); the existing gallery comes from the product
+ * detail (`images[]`) and refreshes on upload via query invalidation. Shows a local preview of the
+ * picked file before upload and the uploaded thumbnails after. Delete/reorder still need BE support.
  */
 export function ProductImageSection({
   productId,
   hasPrimary,
+  images = [],
 }: {
   productId: string;
   hasPrimary: boolean;
+  images?: AdminProductImage[];
 }) {
   const upload = useUploadProductImage(productId);
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [altText, setAltText] = useState("");
   const [makePrimary, setMakePrimary] = useState(!hasPrimary);
   const [error, setError] = useState<string | null>(null);
+
+  // Build (and clean up) a local object-URL preview for the picked file, shown before upload.
+  useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const field =
     "h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
@@ -70,6 +83,34 @@ export function ProductImageSection({
         </span>
       </div>
 
+      {/* Existing gallery (from product detail; refreshes after each upload). */}
+      {images.length > 0 ? (
+        <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+          {images.map((img) => (
+            <li
+              key={img.id}
+              className="group relative overflow-hidden rounded-md border border-gray-200 bg-gray-50"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={pickRendition(img.renditions, img.url)}
+                alt={img.alt_text}
+                className="aspect-square w-full object-cover"
+              />
+              {img.is_primary && (
+                <span className="absolute left-1 top-1 rounded bg-green-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                  Primary
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-md border border-dashed border-gray-200 px-3 py-6 text-center text-sm text-gray-400">
+          No images yet. Upload the first one below.
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -87,6 +128,19 @@ export function ProductImageSection({
         />
         <span className="mt-1 block text-xs text-gray-400">JPEG, PNG or WebP, up to 5 MB.</span>
       </label>
+
+      {/* Local preview of the picked file, before it is uploaded. */}
+      {preview && (
+        <div className="flex items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={preview}
+            alt="Selected file preview"
+            className="h-20 w-20 rounded-md border border-gray-200 object-cover"
+          />
+          <span className="text-xs text-gray-500">Preview — not uploaded yet.</span>
+        </div>
+      )}
 
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-gray-900">Alt text *</span>
@@ -122,8 +176,8 @@ export function ProductImageSection({
       </div>
 
       <p className="text-xs text-gray-400">
-        Managing the full image gallery (viewing, reordering, deleting) needs more backend
-        support — flagged. For now you can upload images and set the primary one.
+        Reordering and deleting images need more backend support — flagged. For now you can upload
+        images, preview them, and set the primary one.
       </p>
     </section>
   );

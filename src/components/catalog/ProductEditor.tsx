@@ -210,7 +210,11 @@ export function ProductEditor({
       {/* Images — upload-only (gallery management flagged for BE). Edit mode only:
           uploads target a saved product id. */}
       {product ? (
-        <ProductImageSection productId={product.id} hasPrimary={!!product.primary_image_id} />
+        <ProductImageSection
+          productId={product.id}
+          hasPrimary={!!product.primary_image_id || (product.images?.length ?? 0) > 0}
+          images={product.images}
+        />
       ) : (
         <section className="rounded-lg border border-gray-200 bg-white p-5 text-sm text-gray-500">
           <h2 className="text-base font-semibold text-gray-900">Images</h2>

@@ -336,9 +336,9 @@ export function useEditorFamily(familyId: string) {
 
 /**
  * Upload a product image (multipart). `is_primary` clears the no_primary_image
- * publish blocker. Invalidates the product so primary_image_id refreshes.
- * NOTE: the admin API has no list/delete/reorder image endpoints yet, so this is
- * upload-only — a full gallery needs BE work (flagged).
+ * publish blocker. Invalidates the product so primary_image_id + images[] refresh,
+ * which re-renders the editor gallery. NOTE: the admin API still has no delete/reorder
+ * image endpoints — those need BE work (flagged); upload + view + set-primary work.
  */
 export function useUploadProductImage(productId: string) {
   const qc = useQueryClient();

@@ -17,6 +17,7 @@ import { usePermissions } from "@/lib/permissions/usePermissions";
 import { ApiError } from "@/lib/api/errors";
 import { formatBDT, formatDate, formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/stores/toast";
+import { resolveMediaUrl } from "@/lib/media";
 import { ReplacementPicker } from "./ReplacementPicker";
 
 /**
@@ -174,12 +175,12 @@ export function ExchangeReviewView({ id }: { id: string }) {
                 {data.attachments.map((a, i) => (
                   <li key={a.id ?? i} className="overflow-hidden rounded-lg border border-gray-200">
                     {a.type?.startsWith("video") ? (
-                      <video src={a.url} controls className="h-32 w-full bg-black object-contain" aria-label={a.label ?? `Exchange evidence ${i + 1} (video)`} />
+                      <video src={resolveMediaUrl(a.url)} controls className="h-32 w-full bg-black object-contain" aria-label={a.label ?? `Exchange evidence ${i + 1} (video)`} />
                     ) : a.type?.startsWith("image") || !a.type ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={a.url} alt={a.label ?? `Exchange evidence ${i + 1}`} className="h-32 w-full object-cover" />
+                      <img src={resolveMediaUrl(a.url)} alt={a.label ?? `Exchange evidence ${i + 1}`} className="h-32 w-full object-cover" />
                     ) : (
-                      <a href={a.url} target="_blank" rel="noreferrer" className="block p-3 text-sm text-brand-700 hover:underline">
+                      <a href={resolveMediaUrl(a.url)} target="_blank" rel="noreferrer" className="block p-3 text-sm text-brand-700 hover:underline">
                         {a.label ?? `Attachment ${i + 1}`}
                       </a>
                     )}

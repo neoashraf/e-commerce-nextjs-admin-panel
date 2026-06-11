@@ -187,8 +187,22 @@ export const productVariantSchema = z.object({
   price: z.string().nullable().optional(),
   image: z.string().nullable().optional(),
   is_enabled: z.boolean().default(true),
+  // Live INV stock for the editor matrix (admin detail joins it per variant).
+  on_hand: z.number().default(0),
+  low_stock_threshold: z.number().default(0),
 });
 export type ProductVariant = z.infer<typeof productVariantSchema>;
+
+/** One image in the admin editor gallery (GET /admin/products/{id} → images[]). */
+export const adminProductImageSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  renditions: z.record(z.string()).default({}),
+  alt_text: z.string(),
+  is_primary: z.boolean().default(false),
+  display_order: z.number().default(0),
+});
+export type AdminProductImage = z.infer<typeof adminProductImageSchema>;
 
 export const productDetailSchema = z.object({
   id: z.string(),
@@ -210,6 +224,7 @@ export const productDetailSchema = z.object({
   status: productStatusSchema.default("draft"),
   primary_category_id: z.string().nullable().optional(),
   primary_image_id: z.string().nullable().optional(),
+  images: z.array(adminProductImageSchema).default([]),
   meta_title: z.string().nullable().optional(),
   meta_description: z.string().nullable().optional(),
   // EAV attribute values keyed by attribute code (text/number = string, boolean,

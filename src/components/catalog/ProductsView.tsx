@@ -8,6 +8,7 @@ import type { ProductRow, ProductStatus } from "@/lib/api/schemas/catalog";
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
 import { formatBDT } from "@/lib/format";
+import { resolveMediaUrl } from "@/lib/media";
 import { toast } from "@/lib/stores/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -140,7 +141,7 @@ export function ProductsView() {
                     <span className="h-10 w-10 shrink-0 overflow-hidden rounded bg-gray-100">
                       {p.primary_image && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.primary_image} alt="" className="h-full w-full object-cover" />
+                        <img src={resolveMediaUrl(p.primary_image)} alt="" className="h-full w-full object-cover" />
                       )}
                     </span>
                     <span className="min-w-0">

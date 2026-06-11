@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGenerateVariants, useUpdateVariant, useAttribute } from "@/lib/api/hooks/useCatalog";
+import { useBulkInventory } from "@/lib/api/hooks/useInventory";
 import type { ProductDetail, ProductVariant, AttributeRow } from "@/lib/api/schemas/catalog";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
+import { Can } from "@/lib/permissions/Can";
 
 /**
  * Variant matrix (catalog-product-editor-fe, configurable products). Axis
@@ -51,7 +54,7 @@ export function VariantMatrix({ product, configurableAttributes }: { product: Pr
         <p className="text-sm text-gray-400">No variants yet.</p>
       ) : (
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400"><th className="py-2 pr-4 font-medium">SKU</th><th className="py-2 pr-4 font-medium">Options</th><th className="py-2 pr-4 font-medium">Price override</th><th className="py-2 font-medium">Enabled</th></tr></thead>
+          <thead><tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400"><th className="py-2 pr-4 font-medium">SKU</th><th className="py-2 pr-4 font-medium">Options</th><th className="py-2 pr-4 font-medium">Stock</th><th className="py-2 pr-4 font-medium">Price override</th><th className="py-2 font-medium">Enabled</th></tr></thead>
           <tbody>{product.variants.map((v) => <VariantRow key={v.id} productId={product.id} variant={v} />)}</tbody>
         </table>
       )}
@@ -79,18 +82,53 @@ function AxisPicker({ attribute, selected, onChange }: { attribute: AttributeRow
 
 function VariantRow({ productId, variant }: { productId: string; variant: ProductVariant }) {
   const update = useUpdateVariant(productId);
+  const bulkStock = useBulkInventory();
+  const qc = useQueryClient();
   const [sku, setSku] = useState(variant.sku_code);
   const [price, setPrice] = useState(variant.price ?? "");
   const [enabled, setEnabled] = useState(variant.is_enabled);
+  const [stock, setStock] = useState(String(variant.on_hand ?? 0));
 
   function save(body: Record<string, unknown>) {
     update.mutate({ variantId: variant.id, body }, { onError: () => toast("Couldn't save the variant.", "error") });
+  }
+
+  // Stock lives in INV: set the absolute on-hand by SKU (so a stale read can't drift the value),
+  // then refresh the product so the matrix reflects the new level.
+  async function saveStock() {
+    const target = Number(stock);
+    if (!Number.isInteger(target) || target < 0) {
+      setStock(String(variant.on_hand ?? 0));
+      toast("Stock must be a whole number ≥ 0.", "error");
+      return;
+    }
+    if (target === (variant.on_hand ?? 0)) return;
+    try {
+      const res = await bulkStock.mutateAsync([
+        { sku_code: variant.sku_code, set_on_hand: target, reason: "Set in product editor" },
+      ]);
+      if (res.failed > 0) {
+        setStock(String(variant.on_hand ?? 0));
+        toast(res.errors[0]?.error === "unknown_sku" ? "Save the SKU first, then set stock." : "Couldn't set stock.", "error");
+        return;
+      }
+      toast("Stock updated.");
+      qc.invalidateQueries({ queryKey: ["admin-product", productId] });
+    } catch {
+      setStock(String(variant.on_hand ?? 0));
+      toast("Couldn't set stock.", "error");
+    }
   }
 
   return (
     <tr className="border-b border-gray-100">
       <td className="py-2 pr-4"><input className="h-8 w-36 rounded border border-gray-300 px-2 font-mono text-xs" value={sku} onChange={(e) => setSku(e.target.value)} onBlur={() => sku !== variant.sku_code && save({ sku_code: sku })} /></td>
       <td className="py-2 pr-4 text-xs text-gray-500">{Object.entries(variant.options).map(([k, v]) => `${k}: ${v}`).join(" · ")}</td>
+      <td className="py-2 pr-4">
+        <Can permission="inventory.stock.update" fallback={<span className="text-xs text-gray-600">{variant.on_hand ?? 0}</span>}>
+          <input className="h-8 w-20 rounded border border-gray-300 px-2 text-xs" type="number" min={0} step={1} value={stock} onChange={(e) => setStock(e.target.value)} onBlur={saveStock} disabled={bulkStock.isPending} />
+        </Can>
+      </td>
       <td className="py-2 pr-4"><input className="h-8 w-24 rounded border border-gray-300 px-2 text-xs" type="number" value={price} onChange={(e) => setPrice(e.target.value)} onBlur={() => (price || null) !== (variant.price ?? null) && save({ price: price || null })} placeholder="—" /></td>
       <td className="py-2"><input type="checkbox" checked={enabled} onChange={(e) => { setEnabled(e.target.checked); save({ is_enabled: e.target.checked }); }} className="h-4 w-4" /></td>
     </tr>

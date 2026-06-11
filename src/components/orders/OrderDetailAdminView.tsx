@@ -15,11 +15,16 @@ import { PaymentPanel } from "@/components/payments/PaymentPanel";
  * advance form (courier/tracking required for shipped; INVALID_TRANSITION /
  * PAYMENT_REQUIRED 409 guards); admin cancel; embedded PAY PaymentPanel.
  */
+// Mirrors the backend FORWARD_LIFECYCLE (fulfilment.service.ts): forward-only,
+// one step at a time — confirmed → processing → packed → shipped →
+// out_for_delivery → delivered. Admin cancel is allowed only pre-shipped.
 const NEXT_STATUS: Record<string, string[]> = {
   pending_payment: ["confirmed", "cancelled"],
   confirmed: ["processing", "cancelled"],
-  processing: ["shipped", "cancelled"],
-  shipped: ["delivered"],
+  processing: ["packed", "cancelled"],
+  packed: ["shipped", "cancelled"],
+  shipped: ["out_for_delivery"],
+  out_for_delivery: ["delivered"],
 };
 
 export function OrderDetailAdminView({ orderNo }: { orderNo: string }) {

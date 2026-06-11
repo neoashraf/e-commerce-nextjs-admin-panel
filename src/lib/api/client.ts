@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { ApiError, type ApiErrorDetail } from "@/lib/api/errors";
-import { getAccessToken } from "@/lib/stores/auth";
+import { getAccessToken, useAuthStore } from "@/lib/stores/auth";
 
 /**
  * Thin fetch wrapper — the single place that knows the request shape
@@ -15,8 +15,12 @@ import { getAccessToken } from "@/lib/stores/auth";
 type Json = Record<string, unknown> | unknown[] | null;
 
 interface RequestOptions<T> {
-  /** Zod schema for the `data` field of the response envelope. */
-  schema?: z.ZodType<T>;
+  /**
+   * Zod schema for the `data` field of the response envelope. Input is `unknown`
+   * (raw parsed JSON) and `T` is the OUTPUT, so transforming schemas — e.g. ones
+   * that rename contract fields (`customer_id` → `id`) — are accepted.
+   */
+  schema?: z.ZodType<T, z.ZodTypeDef, unknown>;
   /** Query params appended to the URL. */
   params?: Record<string, string | number | boolean | undefined | null>;
   /** Skip attaching the auth token (for /admin/auth/* public endpoints). */
@@ -87,6 +91,14 @@ async function request<T>(
   // 204 No Content — nothing to parse; return undefined as T.
   if (res.status === 204) return undefined as T;
 
+  // Session expired / token revoked on an authenticated request: the token we
+  // hold is dead, so clear it. AuthGuard reacts to `tokens` going null and
+  // redirects to /login. Public endpoints (login, password reset) can return
+  // 401 for bad credentials — those must NOT wipe a session.
+  if (res.status === 401 && !opts.public) {
+    useAuthStore.getState().clear();
+  }
+
   let payload: unknown;
   try {
     payload = await res.json();
@@ -129,9 +141,79 @@ async function request<T>(
   return data as T;
 }
 
+/**
+ * Multipart POST for file uploads (e.g. product images). Unlike `request`, this
+ * sends a `FormData` body and lets the browser set the `multipart/form-data`
+ * boundary itself — so we deliberately do NOT set Content-Type. Reuses the same
+ * auth header, error-envelope parsing, and optional Zod unwrap as `request`.
+ */
+async function requestForm<T>(
+  path: string,
+  form: FormData,
+  opts: RequestOptions<T> = {},
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (!opts.public) {
+    const token = getAccessToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, opts.params), {
+      method: "POST",
+      headers,
+      body: form,
+      signal: opts.signal,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "NETWORK_ERROR", "Could not reach the server.", []);
+  }
+
+  if (res.status === 204) return undefined as T;
+  if (res.status === 401 && !opts.public) useAuthStore.getState().clear();
+
+  let payload: unknown;
+  try {
+    payload = await res.json();
+  } catch {
+    if (res.ok) return undefined as T;
+    throw new ApiError(res.status, "BAD_RESPONSE", res.statusText || "Request failed.");
+  }
+
+  if (!res.ok) {
+    const parsed = errorEnvelopeSchema.safeParse(payload);
+    if (parsed.success) {
+      const { code, message, details } = parsed.data.error;
+      throw new ApiError(res.status, code, message, (details as ApiErrorDetail[]) ?? []);
+    }
+    throw new ApiError(res.status, "UNKNOWN", res.statusText || "Request failed.");
+  }
+
+  const env_ = envelopeSchema.safeParse(payload);
+  const data = env_.success ? env_.data.data : payload;
+
+  if (opts.schema) {
+    const valid = opts.schema.safeParse(data);
+    if (!valid.success) {
+      throw new ApiError(
+        res.status,
+        "CONTRACT_MISMATCH",
+        `Response did not match expected shape for POST ${path}.`,
+      );
+    }
+    return valid.data;
+  }
+
+  return data as T;
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions<T>) =>
     request<T>("GET", path, undefined, opts),
+  postForm: <T>(path: string, form: FormData, opts?: RequestOptions<T>) =>
+    requestForm<T>(path, form, opts),
   post: <T>(path: string, body?: Json, opts?: RequestOptions<T>) =>
     request<T>("POST", path, body, opts),
   patch: <T>(path: string, body?: Json, opts?: RequestOptions<T>) =>

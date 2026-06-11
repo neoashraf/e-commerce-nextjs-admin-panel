@@ -274,7 +274,10 @@ import {
   productDetailSchema as _pds,
   createProductResultSchema as _cprs,
   generateVariantsResultSchema as _gvrs,
+  uploadImageResultSchema as _uirs,
+  editorFamilyDetailSchema as _efds,
   type ProductDetail as _PD,
+  type EditorFamilyDetail as _EFD,
 } from "@/lib/api/schemas/catalog";
 
 export function useProduct(id: string) {
@@ -311,6 +314,42 @@ export function useUpdateVariant(productId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ variantId, body }: { variantId: string; body: Record<string, unknown> }) => api.patch(`/admin/variants/${variantId}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}
+
+/**
+ * The product editor's family detail — the chosen family's groups with each
+ * attribute's code/label/type, used to render the family-driven attribute
+ * inputs. Reuses GET /admin/attribute-families/{id} (the BE returns
+ * groups[].attributes[]); we only enable it once a family is known.
+ */
+export function useEditorFamily(familyId: string) {
+  return useQuery({
+    queryKey: ["editor-family", familyId] as const,
+    enabled: !!familyId,
+    queryFn: (): Promise<_EFD> =>
+      api.get(`/admin/attribute-families/${familyId}`, { schema: _efds }) as Promise<_EFD>,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Upload a product image (multipart). `is_primary` clears the no_primary_image
+ * publish blocker. Invalidates the product so primary_image_id + images[] refresh,
+ * which re-renders the editor gallery. NOTE: the admin API still has no delete/reorder
+ * image endpoints — those need BE work (flagged); upload + view + set-primary work.
+ */
+export function useUploadProductImage(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { file: File; alt_text: string; is_primary?: boolean }) => {
+      const form = new FormData();
+      form.append("file", input.file);
+      form.append("alt_text", input.alt_text);
+      if (input.is_primary) form.append("is_primary", "true");
+      return api.postForm(`/admin/products/${productId}/images`, form, { schema: _uirs });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
   });
 }

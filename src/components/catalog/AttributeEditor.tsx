@@ -84,7 +84,7 @@ export function AttributeEditor({ mode, attribute }: { mode: "create" | "edit"; 
   const pending = create.isPending || update.isPending;
 
   return (
-    <form onSubmit={onSave} className="max-w-2xl space-y-6 pb-24">
+    <form onSubmit={onSave} className="max-w-2xl space-y-6">
       <h1 className="text-xl font-bold text-gray-900">
         {mode === "create" ? "New attribute" : `${readOnly ? "View" : "Edit"} ${attribute?.admin_label}`}
       </h1>
@@ -168,7 +168,7 @@ export function AttributeEditor({ mode, attribute }: { mode: "create" | "edit"; 
         </section>
       )}
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:pl-72">
+      <div className="mt-2">
         <div className="mx-auto flex max-w-2xl items-center justify-end gap-3">
           <button type="button" onClick={() => router.push("/admin/attributes")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
           {!readOnly && (

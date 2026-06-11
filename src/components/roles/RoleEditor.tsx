@@ -92,7 +92,7 @@ export function RoleEditor({
   const field = "h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
 
   return (
-    <div className="space-y-5 pb-24">
+    <div className="space-y-5">
       <h1 className="text-xl font-bold text-gray-900">
         {mode === "create" ? "Create role" : readOnly ? `${role?.name} (read-only)` : `Edit ${role?.name}`}
       </h1>
@@ -161,7 +161,7 @@ export function RoleEditor({
       )}
 
       {/* Sticky save bar */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:pl-72">
+      <div className="mt-2">
         <div className="mx-auto flex max-w-5xl items-center justify-end gap-3">
           <button type="button" onClick={() => router.push("/admin/roles")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
           <button

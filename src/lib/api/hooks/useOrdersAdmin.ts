@@ -22,12 +22,12 @@ export const adminOrderDetailSchema = z.object({
   status: z.string(),
   payment_method: z.string().optional(),
   payment_state: z.string().optional(),
-  payment_id: z.string().optional(),
-  address: z.object({ recipient_name: z.string(), recipient_phone: z.string(), address_line: z.string(), area: z.string().optional(), district: z.string().optional(), division: z.string().optional() }).nullable().optional(),
-  items: z.array(z.object({ product_title: z.string(), sku_code: z.string().optional(), variant_options: z.record(z.string()).default({}), unit_price: z.string(), quantity: z.number(), line_total: z.string() })).default([]),
+  payment_id: z.string().nullable().optional(),
+  address: z.object({ recipient_name: z.string(), recipient_phone: z.string(), address_line: z.string(), area: z.string().nullable().optional(), district: z.string().nullable().optional(), division: z.string().nullable().optional() }).nullable().optional(),
+  items: z.array(z.object({ product_title: z.string(), sku_code: z.string().nullable().optional(), variant_options: z.record(z.string()).default({}), unit_price: z.string(), quantity: z.number(), line_total: z.string() })).default([]),
   amounts: z.object({ subtotal: z.string(), grand_total: z.string() }).partial().optional(),
-  shipment: z.object({ courier_name: z.string().optional(), tracking_number: z.string().optional() }).nullable().optional(),
-  history: z.array(z.object({ to_status: z.string(), note: z.string().optional(), created_at: z.string() })).default([]),
+  shipment: z.object({ courier_name: z.string().nullable().optional(), tracking_number: z.string().nullable().optional() }).nullable().optional(),
+  history: z.array(z.object({ to_status: z.string(), note: z.string().nullable().optional(), created_at: z.string() })).default([]),
   internal_notes: z.array(z.object({ body: z.string(), created_at: z.string().optional() })).default([]),
 });
 export type AdminOrderDetail = z.infer<typeof adminOrderDetailSchema>;

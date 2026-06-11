@@ -112,6 +112,7 @@ export const familyRowSchema = z.object({
 export type FamilyRow = z.infer<typeof familyRowSchema>;
 export const familyListSchema = z.array(familyRowSchema);
 
+/** Outbound shape we SEND on create/update — groups carry a flat list of codes. */
 export const familyGroupSchema = z.object({
   name: z.string(),
   column: z.number().default(1),
@@ -120,12 +121,36 @@ export const familyGroupSchema = z.object({
 });
 export type FamilyGroup = z.infer<typeof familyGroupSchema>;
 
+/**
+ * Inbound group shape the BE RETURNS on family-detail: each group carries an
+ * `attributes` array of objects ({ code, admin_label, … }), NOT a flat
+ * `attribute_codes` string list. We map it down to `attribute_codes` so the
+ * editor's group canvas keeps working off codes. (Tolerates either shape.)
+ */
+const familyGroupDetailSchema = z
+  .object({
+    name: z.string(),
+    column: z.number().catch(1),
+    position: z.number().catch(1),
+    attributes: z
+      .array(z.object({ code: z.string() }))
+      .optional(),
+    attribute_codes: z.array(z.string()).optional(),
+  })
+  .transform((g) => ({
+    name: g.name,
+    column: g.column,
+    position: g.position,
+    attribute_codes:
+      g.attribute_codes ?? (g.attributes ?? []).map((a) => a.code),
+  }));
+
 export const familyDetailSchema = z.object({
   id: z.string(),
   code: z.string(),
   name: z.string(),
   is_default: z.boolean().optional(),
-  groups: z.array(familyGroupSchema).default([]),
+  groups: z.array(familyGroupDetailSchema).default([]),
 });
 export type FamilyDetail = z.infer<typeof familyDetailSchema>;
 
@@ -162,8 +187,22 @@ export const productVariantSchema = z.object({
   price: z.string().nullable().optional(),
   image: z.string().nullable().optional(),
   is_enabled: z.boolean().default(true),
+  // Live INV stock for the editor matrix (admin detail joins it per variant).
+  on_hand: z.number().default(0),
+  low_stock_threshold: z.number().default(0),
 });
 export type ProductVariant = z.infer<typeof productVariantSchema>;
+
+/** One image in the admin editor gallery (GET /admin/products/{id} → images[]). */
+export const adminProductImageSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  renditions: z.record(z.string()).default({}),
+  alt_text: z.string(),
+  is_primary: z.boolean().default(false),
+  display_order: z.number().default(0),
+});
+export type AdminProductImage = z.infer<typeof adminProductImageSchema>;
 
 export const productDetailSchema = z.object({
   id: z.string(),
@@ -184,12 +223,47 @@ export const productDetailSchema = z.object({
   is_new: z.boolean().default(false),
   status: productStatusSchema.default("draft"),
   primary_category_id: z.string().nullable().optional(),
+  primary_image_id: z.string().nullable().optional(),
+  images: z.array(adminProductImageSchema).default([]),
   meta_title: z.string().nullable().optional(),
   meta_description: z.string().nullable().optional(),
+  // EAV attribute values keyed by attribute code (text/number = string, boolean,
+  // multiselect = string[]). The editor's family-driven inputs read/write this.
+  attributes: z.record(z.unknown()).default({}),
   variants: z.array(productVariantSchema).default([]),
   updated_at: z.string().optional(),
 });
 export type ProductDetail = z.infer<typeof productDetailSchema>;
+
+/** `{ id, renditions }` returned by POST /admin/products/{id}/images. */
+export const uploadImageResultSchema = z.object({
+  id: z.string(),
+  renditions: z.record(z.string()).default({}),
+});
+
+// ---- Family detail for the product editor (attribute inputs) ----
+
+/** One attribute within a family group, as the editor needs to render its input. */
+export const familyAttributeSchema = z.object({
+  code: z.string(),
+  admin_label: z.string(),
+  type: z.string(),
+});
+export type FamilyAttribute = z.infer<typeof familyAttributeSchema>;
+
+const editorFamilyGroupSchema = z.object({
+  name: z.string(),
+  attributes: z.array(familyAttributeSchema).default([]),
+});
+
+/** Family detail reshaped for the editor: groups → their attribute lists. */
+export const editorFamilyDetailSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  name: z.string(),
+  groups: z.array(editorFamilyGroupSchema).default([]),
+});
+export type EditorFamilyDetail = z.infer<typeof editorFamilyDetailSchema>;
 
 export const createProductResultSchema = z.object({ id: z.string(), slug: z.string().optional(), type: z.string().optional(), status: z.string().optional() });
 export const generateVariantsResultSchema = z.object({ variants_created: z.number().optional(), variants: z.array(productVariantSchema).default([]) });

@@ -2,11 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useCreateProduct, useUpdateProduct, useProductStatus, useFamilies, useFilterableAttributes } from "@/lib/api/hooks/useCatalog";
-import type { ProductDetail } from "@/lib/api/schemas/catalog";
+import { useCreateProduct, useUpdateProduct, useProductStatus, useFamilies, useFilterableAttributes, useCategoryTree } from "@/lib/api/hooks/useCatalog";
+import type { ProductDetail, CategoryNode } from "@/lib/api/schemas/catalog";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
 import { VariantMatrix } from "./VariantMatrix";
+import { FamilyAttributesSection } from "./FamilyAttributesSection";
+import { ProductImageSection } from "./ProductImageSection";
+
+type AttrValue = string | string[] | boolean;
 
 /**
  * Product editor (catalog-product-editor-fe). General (name/sku/brand/url_key +
@@ -31,6 +35,7 @@ export function ProductEditor({
   const statusM = useProductStatus();
   const { data: families } = useFamilies();
   const { data: attributes } = useFilterableAttributes();
+  const { data: categoryTree } = useCategoryTree();
 
   const type = product?.type ?? initial?.type ?? "simple";
   const familyId = product?.family_id ?? initial?.family_id ?? "";
@@ -47,17 +52,39 @@ export function ProductEditor({
   const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? false);
   const [isNew, setIsNew] = useState(product?.is_new ?? false);
   const [metaTitle, setMetaTitle] = useState(product?.meta_title ?? "");
+  const [primaryCategoryId, setPrimaryCategoryId] = useState(product?.primary_category_id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [publishErrors, setPublishErrors] = useState<string[]>([]);
   const [stale, setStale] = useState(false);
+  // Family-driven attribute values, keyed by attribute code (seeded from the
+  // product's saved `attributes` map). Sent back as `attributes` on save.
+  const [attrValues, setAttrValues] = useState<Record<string, AttrValue>>(
+    () => (product?.attributes as Record<string, AttrValue>) ?? {},
+  );
+  const setAttr = (code: string, value: AttrValue) =>
+    setAttrValues((prev) => ({ ...prev, [code]: value }));
 
   const skuLocked = mode === "edit";
   const field = "h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
   const familyLabel = families?.find((f) => f.id === familyId)?.name ?? familyId;
 
+  // Flatten the nested category tree into indented options for the primary-category select.
+  const categoryOptions: { id: string; label: string }[] = [];
+  const walkCategories = (nodes: CategoryNode[], depth: number) => {
+    for (const node of nodes) {
+      if (node.is_deleted) continue;
+      categoryOptions.push({ id: node.id, label: `${"— ".repeat(depth)}${node.name}` });
+      if (node.children?.length) walkCategories(node.children, depth + 1);
+    }
+  };
+  if (categoryTree) walkCategories(categoryTree, 0);
+
+  // Fields shared by create + update. `type` / `family_id` are immutable and only
+  // belong in the create body — the update DTO rejects them (forbidNonWhitelisted),
+  // so the edit call sites must not include them.
   function buildBody(): Record<string, unknown> {
     return {
-      type, family_id: familyId || undefined,
+      primary_category_id: primaryCategoryId || undefined,
       name: name.trim(), brand: brand.trim() || undefined,
       short_description: shortDesc.trim() || undefined, description: description.trim() || undefined,
       base_price: basePrice || undefined,
@@ -66,6 +93,8 @@ export function ProductEditor({
       sale_ends_at: saleEnd ? `${saleEnd}T23:59:59Z` : undefined,
       is_featured: isFeatured, is_new: isNew,
       meta_title: metaTitle.trim() || undefined,
+      // Family-driven attribute values; omit when none so we never send an empty map.
+      attributes: Object.keys(attrValues).length ? attrValues : undefined,
     };
   }
 
@@ -73,10 +102,11 @@ export function ProductEditor({
     e.preventDefault();
     setError(null);
     if (name.trim().length < 2) { setError("Name must be at least 2 characters."); return; }
+    if (!primaryCategoryId) { setError("Select a primary category."); return; }
     if (salePrice && basePrice && Number(salePrice) >= Number(basePrice)) { setError("Sale price must be less than the base price."); return; }
     try {
       if (mode === "create") {
-        const res = await create.mutateAsync({ ...buildBody(), sku: sku.trim() });
+        const res = await create.mutateAsync({ ...buildBody(), type, family_id: familyId || undefined, sku: sku.trim() });
         toast("Product saved.");
         router.replace(`/admin/products/${(res as { id: string }).id}`);
       } else {
@@ -109,7 +139,7 @@ export function ProductEditor({
   const pending = create.isPending || update.isPending;
 
   return (
-    <form onSubmit={onSave} className="max-w-3xl space-y-6 pb-24">
+    <form onSubmit={onSave} className="max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold text-gray-900">{mode === "create" ? "New product" : product?.name}</h1>
@@ -141,11 +171,22 @@ export function ProductEditor({
           <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">SKU {skuLocked && <span className="text-gray-400">(locked)</span>}</span><input className={field + (skuLocked ? " bg-gray-50 text-gray-500" : "")} value={sku} onChange={(e) => setSku(e.target.value)} readOnly={skuLocked} /></label>
           <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Brand</span><input className={field} value={brand} onChange={(e) => setBrand(e.target.value)} /></label>
         </div>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-gray-900">Primary category *</span>
+          <select className={field} value={primaryCategoryId} onChange={(e) => setPrimaryCategoryId(e.target.value)} required>
+            <option value="" disabled>Select a category…</option>
+            {categoryOptions.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </label>
         {product?.slug && <p className="text-xs text-gray-400">URL key: /{product.slug} (generated from the name)</p>}
         <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Short description</span><input className={field} value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} /></label>
         <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Description</span><textarea className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-        <p className="text-xs text-gray-400">Family-driven attribute sections render here once the BE serves the family&apos;s groups — flagged.</p>
       </section>
+
+      {/* Family-driven attribute inputs (renders the family's non-system attributes) */}
+      {familyId && (
+        <FamilyAttributesSection familyId={familyId} values={attrValues} onChange={setAttr} />
+      )}
 
       {/* Price */}
       <section className="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 bg-white p-5 sm:grid-cols-2">
@@ -164,8 +205,22 @@ export function ProductEditor({
           <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={isNew} onChange={(e) => setIsNew(e.target.checked)} className="h-4 w-4" /> New</label>
         </div>
         <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Meta title</span><input className={field} value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} placeholder={name} /></label>
-        <p className="text-xs text-gray-400">Image &amp; video upload lands with the media integration — flagged.</p>
       </section>
+
+      {/* Images — upload-only (gallery management flagged for BE). Edit mode only:
+          uploads target a saved product id. */}
+      {product ? (
+        <ProductImageSection
+          productId={product.id}
+          hasPrimary={!!product.primary_image_id || (product.images?.length ?? 0) > 0}
+          images={product.images}
+        />
+      ) : (
+        <section className="rounded-lg border border-gray-200 bg-white p-5 text-sm text-gray-500">
+          <h2 className="text-base font-semibold text-gray-900">Images</h2>
+          <p className="mt-1">Save the product first, then upload its images.</p>
+        </section>
+      )}
 
       {/* Inventory note */}
       <section className="rounded-lg border border-gray-200 bg-white p-5 text-sm text-gray-600">
@@ -185,11 +240,9 @@ export function ProductEditor({
         </section>
       )}
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:pl-72">
-        <div className="mx-auto flex max-w-3xl items-center justify-end gap-3">
-          <button type="button" onClick={() => router.push("/admin/products")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
-          <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{pending ? "Saving…" : "Save product"}</button>
-        </div>
+      <div className="mt-2 flex items-center justify-end gap-3">
+        <button type="button" onClick={() => router.push("/admin/products")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
+        <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{pending ? "Saving…" : "Save product"}</button>
       </div>
     </form>
   );

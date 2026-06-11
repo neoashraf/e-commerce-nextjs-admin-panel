@@ -34,7 +34,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Categories", href: "/admin/categories", permission: "catalog.category.read" },
       { label: "Attributes", href: "/admin/attributes", permission: "catalog.attribute.read" },
       { label: "Attribute Families", href: "/admin/attribute-families", permission: "catalog.attribute.read" },
-      { label: "Inventory", href: "/admin/inventory", permission: "inventory.stock.read" },
+    ],
+  },
+  {
+    title: "Inventory",
+    items: [
+      { label: "Stock", href: "/admin/inventory", permission: "inventory.stock.read" },
     ],
   },
   {
@@ -58,7 +63,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Insights",
     items: [
-      { label: "Reports", href: "/admin/reports", permission: "reports.view" },
+      { label: "Reports", href: "/admin/reports", permission: "reports.report.view" },
     ],
   },
   {

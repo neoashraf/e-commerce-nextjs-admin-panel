@@ -20,7 +20,8 @@ export function FamilyEditor({ mode, family }: { mode: "create" | "edit"; family
   const router = useRouter();
   const create = useCreateFamily();
   const update = useUpdateFamily(family?.id ?? "");
-  const { data: allAttributes } = useAttributes({ page: 1, limit: 300 });
+  // BE caps `limit` at 200 (list-attributes-query.dto.ts @Max(200)); 300 → 400 VALIDATION_ERROR.
+  const { data: allAttributes } = useAttributes({ page: 1, limit: 200 });
 
   const [code, setCode] = useState(family?.code ?? "");
   const [name, setName] = useState(family?.name ?? "");
@@ -110,7 +111,7 @@ export function FamilyEditor({ mode, family }: { mode: "create" | "edit"; family
   const pending = create.isPending || update.isPending;
 
   return (
-    <form onSubmit={onSave} className="space-y-6 pb-24">
+    <form onSubmit={onSave} className="space-y-6">
       <h1 className="text-xl font-bold text-gray-900">{mode === "create" ? "New attribute family" : `Edit ${family?.name}`}</h1>
       <p aria-live="polite" className="sr-only">{announce}</p>
       {error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -195,7 +196,7 @@ export function FamilyEditor({ mode, family }: { mode: "create" | "edit"; family
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:pl-72">
+      <div className="mt-2">
         <div className="mx-auto flex max-w-5xl items-center justify-end gap-3">
           <button type="button" onClick={() => router.push("/admin/attribute-families")} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
           <button type="submit" disabled={pending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">

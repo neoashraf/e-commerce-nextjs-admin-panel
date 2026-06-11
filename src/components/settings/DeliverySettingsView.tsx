@@ -37,7 +37,7 @@ export function DeliverySettingsView() {
   const inp = "h-9 w-full rounded-md border border-gray-300 px-2 text-sm";
 
   return (
-    <div className="space-y-5 pb-24">
+    <div className="space-y-5">
       <h1 className="text-xl font-bold text-gray-900">Delivery settings</h1>
       {error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
@@ -64,7 +64,7 @@ export function DeliverySettingsView() {
         )}
 
       <Can permission="cart.settings.manage">
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:pl-72">
+        <div className="mt-2">
           <div className="mx-auto flex max-w-5xl items-center justify-end"><button type="button" onClick={onSave} disabled={save.isPending} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{save.isPending ? "Saving…" : "Save delivery settings"}</button></div>
         </div>
       </Can>

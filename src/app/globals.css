@@ -22,3 +22,15 @@ body {
 * {
   box-sizing: border-box;
 }
+
+@layer utilities {
+  /* Scroll stays functional; the scrollbar itself is hidden. Used on the admin
+     shell's sidebar + main scroll regions. */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE / old Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome / Safari / WebKit */
+  }
+}

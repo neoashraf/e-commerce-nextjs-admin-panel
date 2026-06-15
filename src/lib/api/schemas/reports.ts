@@ -178,3 +178,66 @@ export const searchRowSchema = z.object({
 });
 export type SearchRow = z.infer<typeof searchRowSchema>;
 export const searchReportSchema = z.array(searchRowSchema);
+
+// ── Export (FR-RPT-070) — rpt-fe-export-schedules ─────────────────────────────
+
+export const EXPORT_FORMATS = ["csv", "pdf"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+export const exportStatusSchema = z.enum(["processing", "ready", "failed"]);
+export type ExportStatus = z.infer<typeof exportStatusSchema>;
+
+/** `POST /admin/reports/export` → 202. */
+export const exportAcceptedSchema = z.object({
+  export_id: z.string(),
+  status: exportStatusSchema,
+});
+export type ExportAccepted = z.infer<typeof exportAcceptedSchema>;
+
+/** `GET /admin/reports/export/{id}` — poll for status + download link. */
+export const exportStatusResultSchema = z.object({
+  status: exportStatusSchema,
+  file_url: z.string().nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+});
+export type ExportStatusResult = z.infer<typeof exportStatusResultSchema>;
+
+/**
+ * `GET /admin/reports/exports` — the export manager list (rpt-export-list-be, EB2).
+ * The endpoint is additive and not yet shipped on the BE; the manager degrades
+ * gracefully (empty list) until it lands.
+ */
+export const exportRowSchema = z.object({
+  export_id: z.string(),
+  report_key: z.string(),
+  format: exportStatusSchema.or(z.enum(EXPORT_FORMATS)).or(z.string()),
+  status: exportStatusSchema,
+  file_url: z.string().nullable().optional(),
+  created_at: z.string().optional(),
+  expires_at: z.string().nullable().optional(),
+  params: z.record(z.unknown()).optional(),
+});
+export type ExportRow = z.infer<typeof exportRowSchema>;
+export const exportListSchema = z.array(exportRowSchema);
+
+// ── Schedules (FR-RPT-071) — rpt-fe-export-schedules ──────────────────────────
+
+export const SCHEDULE_CADENCES = ["daily", "weekly", "monthly"] as const;
+export type ScheduleCadence = (typeof SCHEDULE_CADENCES)[number];
+
+export const scheduleSchema = z.object({
+  id: z.string(),
+  report_key: z.string(),
+  params: z.record(z.unknown()).default({}),
+  cadence: z.enum(SCHEDULE_CADENCES),
+  recipients_admin_ids: z.array(z.string()).default([]),
+  is_active: z.boolean(),
+  last_run_at: z.string().nullable().optional(),
+  last_run_skipped_admin_ids: z.array(z.string()).nullable().optional(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+});
+export type Schedule = z.infer<typeof scheduleSchema>;
+export const scheduleListSchema = z.array(scheduleSchema);
+
+export const scheduleCreatedSchema = z.object({ id: z.string() });

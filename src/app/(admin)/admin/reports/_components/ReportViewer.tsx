@@ -11,6 +11,7 @@ import { CustomersReport } from "./CustomersReport";
 import { PaymentsReport } from "./PaymentsReport";
 import { PromotionsReport } from "./PromotionsReport";
 import { SearchReport } from "./SearchReport";
+import { ExportButton } from "./ExportButton";
 
 /**
  * Report viewer host — renders the title, the controls (per the report's meta),
@@ -38,9 +39,12 @@ export function ReportViewer({ reportKey }: { reportKey: ReportKey }) {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">{meta.label}</h1>
-        <p className="mt-0.5 text-sm text-gray-500">{meta.description}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">{meta.label}</h1>
+          <p className="mt-0.5 text-sm text-gray-500">{meta.description}</p>
+        </div>
+        <ExportButton meta={meta} />
       </div>
 
       <ReportControls meta={meta} />

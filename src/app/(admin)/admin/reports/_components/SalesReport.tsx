@@ -2,7 +2,7 @@
 
 import { useSalesReport } from "@/lib/api/hooks/reports";
 import { formatBDT } from "@/lib/format";
-import { BarBreakdownChart, TrendChart, type TrendPoint } from "./charts";
+import { BarBreakdownChart, TrendChart, type TrendPoint } from "@/components/charts";
 import type { ReportMeta } from "./catalog";
 import { useReportParams } from "./ReportControls";
 import { AsOf, Column, DataTable, ReportState, Section, Stat } from "./primitives";

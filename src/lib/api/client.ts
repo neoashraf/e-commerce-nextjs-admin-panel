@@ -25,6 +25,12 @@ interface RequestOptions<T> {
   params?: Record<string, string | number | boolean | undefined | null>;
   /** Skip attaching the auth token (for /admin/auth/* public endpoints). */
   public?: boolean;
+  /**
+   * Return the FULL `{ data, meta }` envelope instead of unwrapping to `data`.
+   * Needed by endpoints whose `meta` carries response info (e.g. the dashboard's
+   * `meta.visible_widgets`). When set, `schema` validates the whole envelope.
+   */
+  rawEnvelope?: boolean;
   signal?: AbortSignal;
 }
 
@@ -121,9 +127,14 @@ async function request<T>(
     throw new ApiError(res.status, "UNKNOWN", res.statusText || "Request failed.");
   }
 
-  // Success — unwrap the { data } envelope and optionally validate.
+  // Success — unwrap the { data } envelope and optionally validate. When
+  // `rawEnvelope` is set, validate/return the whole { data, meta } payload.
   const env_ = envelopeSchema.safeParse(payload);
-  const data = env_.success ? env_.data.data : payload;
+  const data = opts.rawEnvelope
+    ? payload
+    : env_.success
+      ? env_.data.data
+      : payload;
 
   if (opts.schema) {
     const valid = opts.schema.safeParse(data);

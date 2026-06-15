@@ -2,7 +2,7 @@
 
 import { useProductsReport } from "@/lib/api/hooks/reports";
 import { formatBDT } from "@/lib/format";
-import { BarBreakdownChart } from "./charts";
+import { BarBreakdownChart } from "@/components/charts";
 import type { ReportMeta } from "./catalog";
 import { useReportParams } from "./ReportControls";
 import { Column, DataTable, ReportState, Section } from "./primitives";

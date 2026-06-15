@@ -2,7 +2,7 @@
 
 import { useOrdersReport } from "@/lib/api/hooks/reports";
 import { formatBDT } from "@/lib/format";
-import { DonutChart } from "./charts";
+import { DonutChart } from "@/components/charts";
 import type { ReportMeta } from "./catalog";
 import { useReportParams } from "./ReportControls";
 import { AsOf, DataTable, ReportState, Section, Stat } from "./primitives";

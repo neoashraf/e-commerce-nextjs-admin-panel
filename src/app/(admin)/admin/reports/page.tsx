@@ -1,6 +1,12 @@
-import { ReportsView } from "@/components/reports/ReportsView";
+import type { Metadata } from "next";
+import { ReportsCatalog } from "./_components/ReportsCatalog";
 
-/** Reports (sales) — /admin/reports (rpt-fe). */
+export const metadata: Metadata = { title: "Reports" };
+
+/**
+ * Reports catalog — /admin/reports (rpt-fe-shell-reports). Permission-filtered
+ * grid of report cards; picking one opens /admin/reports/[reportKey].
+ */
 export default function ReportsPage() {
-  return <ReportsView />;
+  return <ReportsCatalog />;
 }

@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Bell, ChevronDown, Menu, Search } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useAdminLogout } from "@/lib/api/hooks/useAuth";
 
 /**
- * Admin top bar (rbac-admin-shell-fe AC5): mobile menu toggle + an account menu
- * showing the admin name + role badge, with "My profile / Security" and a
- * Logout action (revokes server-side, clears the store, redirects to login).
+ * Admin top bar (design-system §7.2): mobile menu toggle, a left global search
+ * (visual affordance with ⌘K hint), a notifications bell, and an account menu
+ * showing the admin name + role with "My profile / Security" and Logout (revokes
+ * server-side, clears the store, redirects to login). The bar is quiet — no
+ * accent fills; it frames, it doesn't compete.
+ *
  * Keyboard-accessible menu: Esc + outside-click close, focus returns to trigger.
  */
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
@@ -29,7 +33,10 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
       }
     }
     function onClick(e: MouseEvent) {
-      if (!menuRef.current?.contains(e.target as Node) && !triggerRef.current?.contains(e.target as Node)) {
+      if (
+        !menuRef.current?.contains(e.target as Node) &&
+        !triggerRef.current?.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     }
@@ -49,17 +56,46 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const initial = admin?.full_name?.trim()?.charAt(0)?.toUpperCase() ?? "A";
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4">
+    <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border bg-surface px-4">
       <button
         type="button"
         onClick={onMenuClick}
-        className="-ml-1 rounded-md p-2 text-gray-600 hover:bg-gray-100 md:hidden"
+        className="-ml-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 md:hidden"
         aria-label="Open navigation menu"
       >
-        <span aria-hidden className="block h-0.5 w-5 bg-current shadow-[0_6px_0_currentColor,0_-6px_0_currentColor]" />
+        <Menu className="h-5 w-5" aria-hidden="true" />
       </button>
 
-      <div className="flex flex-1 items-center justify-end">
+      {/* Global search (visual affordance; backend search is out of scope here). */}
+      <div className="relative hidden max-w-md flex-1 sm:block">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint"
+          aria-hidden="true"
+        />
+        <input
+          type="search"
+          placeholder="Search orders, products, customers…"
+          aria-label="Search"
+          className="h-9 w-full rounded-md border border-border-strong bg-surface pl-9 pr-16 text-sm text-text placeholder:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
+        />
+        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-surface-subtle px-1.5 py-0.5 text-[11px] font-medium text-text-muted">
+          ⌘K
+        </kbd>
+      </div>
+
+      <div className="flex flex-1 items-center justify-end gap-1 sm:flex-none">
+        <button
+          type="button"
+          aria-label="Notifications"
+          className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+        >
+          <Bell className="h-5 w-5" aria-hidden="true" />
+          <span
+            className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-error ring-2 ring-surface"
+            aria-hidden="true"
+          />
+        </button>
+
         <div className="relative">
           <button
             ref={triggerRef}
@@ -67,26 +103,49 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
             aria-haspopup="menu"
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
           >
-            <span aria-hidden className="grid h-8 w-8 place-items-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">
+            <span
+              aria-hidden
+              className="grid h-8 w-8 place-items-center rounded-full bg-accent-100 text-sm font-semibold text-accent-700"
+            >
               {initial}
             </span>
-            <span className="hidden text-right leading-tight sm:block">
-              <span className="block max-w-[12rem] truncate font-medium text-gray-900">{admin?.full_name ?? "Admin"}</span>
+            <span className="hidden text-right leading-tight lg:block">
+              <span className="block max-w-[12rem] truncate font-medium text-text">
+                {admin?.full_name ?? "Admin"}
+              </span>
               {admin?.role && (
-                <span className="inline-block rounded bg-gray-100 px-1.5 text-xs font-medium text-gray-600">{admin.role}</span>
+                <span className="block text-xs text-text-muted">{admin.role}</span>
               )}
             </span>
+            <ChevronDown
+              className="hidden h-4 w-4 text-text-muted lg:block"
+              aria-hidden="true"
+            />
           </button>
 
           {open && (
-            <div ref={menuRef} role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-              <div className="border-b border-gray-100 px-4 py-2 sm:hidden">
-                <p className="truncate text-sm font-medium text-gray-900">{admin?.full_name ?? "Admin"}</p>
-                {admin?.role && <p className="text-xs text-gray-500">{admin.role}</p>}
+            <div
+              ref={menuRef}
+              role="menu"
+              aria-label="Account"
+              className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-md border border-border bg-surface py-1 shadow-md"
+            >
+              <div className="border-b border-border px-4 py-2 lg:hidden">
+                <p className="truncate text-sm font-medium text-text">
+                  {admin?.full_name ?? "Admin"}
+                </p>
+                {admin?.role && (
+                  <p className="text-xs text-text-muted">{admin.role}</p>
+                )}
               </div>
-              <Link href="/admin/profile" role="menuitem" onClick={() => setOpen(false)} className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+              <Link
+                href="/admin/profile"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="block px-4 py-2.5 text-sm text-text-secondary hover:bg-surface-subtle"
+              >
                 My profile / Security
               </Link>
               <button
@@ -94,7 +153,7 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
                 role="menuitem"
                 onClick={onLogout}
                 disabled={logout.isPending}
-                className="block w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="block w-full px-4 py-2.5 text-left text-sm text-text-secondary hover:bg-surface-subtle disabled:opacity-60"
               >
                 {logout.isPending ? "Signing out…" : "Log out"}
               </button>

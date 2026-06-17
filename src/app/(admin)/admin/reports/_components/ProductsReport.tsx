@@ -3,14 +3,15 @@
 import { useProductsReport } from "@/lib/api/hooks/reports";
 import { formatBDT } from "@/lib/format";
 import { BarBreakdownChart } from "@/components/charts";
+import { ChartCard } from "@/components/ui";
 import type { ReportMeta } from "./catalog";
 import { useReportParams } from "./ReportControls";
 import { Column, DataTable, ReportState, Section } from "./primitives";
 
 /**
  * Products report (FR-RPT-020/021) — top_sellers / by_category / slow_movers,
- * ranked by units or revenue (top_n). Chart ranks the top rows; table is the
- * full accessible equivalent.
+ * ranked by units or revenue (top_n). A horizontal bar ranks the top rows; the
+ * table is the full accessible equivalent. Presentation only.
  */
 export function ProductsReport({ meta }: { meta: ReportMeta }) {
   const { apiParams, metric } = useReportParams(meta);
@@ -41,13 +42,14 @@ export function ProductsReport({ meta }: { meta: ReportMeta }) {
     >
       <div className="space-y-6">
         {chartData.length > 0 && (
-          <Section title={isRevenue ? "By revenue" : "By units"}>
+          <ChartCard title={isRevenue ? "Ranked by revenue" : "Ranked by units"}>
             <BarBreakdownChart
               data={chartData}
               valueLabel={isRevenue ? "Revenue" : "Units"}
               currency={isRevenue}
+              horizontal
             />
-          </Section>
+          </ChartCard>
         )}
 
         <Section title="Products">

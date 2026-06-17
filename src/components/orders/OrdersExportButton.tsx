@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Download } from "lucide-react";
 import { Can } from "@/lib/permissions/Can";
+import { Button } from "@/components/ui";
 import { useCreateExport, useExportStatus } from "@/lib/api/hooks/reports";
 import type { ExportFormat } from "@/lib/api/schemas/reports";
 
@@ -55,31 +57,39 @@ export function OrdersExportButton({
     a.remove();
   }, [ready, fileUrl, exportId]);
 
-  const btn =
-    "h-10 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50";
-
   return (
     <Can permission={EXPORT_PERMISSION}>
       <div className="flex flex-col items-end gap-1">
         <div className="flex gap-2">
-          <button type="button" onClick={() => submit("csv")} disabled={busy} className={btn}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => submit("csv")}
+            disabled={busy}
+            leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
+          >
             Export CSV
-          </button>
-          <button type="button" onClick={() => submit("pdf")} disabled={busy} className={btn}>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => submit("pdf")}
+            disabled={busy}
+          >
             Export PDF
-          </button>
+          </Button>
         </div>
         <p aria-live="polite" className="text-xs">
           {busy && (
-            <span className="text-gray-500">Export is processing — we&apos;ll have it ready shortly.</span>
+            <span className="text-text-muted">Export is processing — we&apos;ll have it ready shortly.</span>
           )}
-          {failed && <span className="text-red-600">Export failed. Try again.</span>}
+          {failed && <span className="text-error">Export failed. Try again.</span>}
           {ready && (
-            <span className="text-gray-500">
+            <span className="text-text-muted">
               Downloaded.{" "}
               <a
                 href={fileUrl!}
-                className="font-medium text-brand-700 hover:underline"
+                className="font-medium text-accent-700 hover:underline"
                 target="_blank"
                 rel="noopener noreferrer"
               >

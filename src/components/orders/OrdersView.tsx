@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminOrders } from "@/lib/api/hooks/useOrdersAdmin";
+import { OrdersExportButton } from "@/components/orders/OrdersExportButton";
 import { formatBDT, formatDateTime } from "@/lib/format";
 
 /**
@@ -43,6 +44,9 @@ export function OrdersView() {
         <select className={inp} value={paymentState} onChange={(e) => setParam("payment_state", e.target.value)}>
           <option value="">All payments</option><option value="paid">Paid</option><option value="unpaid">Unpaid</option><option value="cod_pending">COD pending</option>
         </select>
+        <div className="ml-auto">
+          <OrdersExportButton filters={{ q: q || undefined, status: status || undefined, payment_state: paymentState || undefined }} />
+        </div>
       </div>
 
       {isLoading ? <div className="h-64 animate-pulse rounded-lg bg-gray-100" />

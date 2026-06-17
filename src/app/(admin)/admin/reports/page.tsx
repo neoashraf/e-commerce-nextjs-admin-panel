@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { ReportsCatalog } from "./_components/ReportsCatalog";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Reports" };
 
 /**
- * Reports catalog — /admin/reports (rpt-fe-shell-reports). Permission-filtered
- * grid of report cards; picking one opens /admin/reports/[reportKey].
+ * Reports landing — /admin/reports defaults to the Sales report (design-system
+ * §8.8: the tab bar conveys context, Sales is the default tab). The per-report
+ * viewer enforces permission; the BE remains authoritative.
  */
 export default function ReportsPage() {
-  return <ReportsCatalog />;
+  redirect("/admin/reports/sales");
 }

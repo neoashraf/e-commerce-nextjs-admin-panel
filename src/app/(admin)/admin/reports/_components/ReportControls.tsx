@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Input, SegmentedControl, Select } from "@/components/ui";
 import type { ReportMeta } from "./catalog";
 import { isoDaysAgo, rangeError, todayIso } from "./dates";
 
@@ -10,10 +11,8 @@ import { isoDaysAgo, rangeError, todayIso } from "./dates";
  * Which controls render is driven by the report's catalog meta. State is
  * URL-reflected (shareable + back-button friendly) per the FE state rules;
  * defaults are applied in `useReportParams` so the URL stays clean until changed.
+ * Re-skinned to the design-system inputs/segmented control (presentation only).
  */
-
-const inp =
-  "h-10 rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
 
 /** Reads the effective report params from the URL, applying per-report defaults. */
 export function useReportParams(meta: ReportMeta) {
@@ -70,24 +69,26 @@ export function ReportControls({ meta }: { meta: ReportMeta }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {showRange && (
           <>
-            <label className="text-sm text-gray-600">
+            <label className="flex items-center gap-1.5 text-sm text-text-muted">
               From
-              <input
+              <Input
                 type="date"
-                className={inp + " ml-1"}
+                className="w-auto"
+                aria-label="From date"
                 value={from}
                 max={to}
                 onChange={(e) => setParam("from", e.target.value)}
               />
             </label>
-            <label className="text-sm text-gray-600">
+            <label className="flex items-center gap-1.5 text-sm text-text-muted">
               To
-              <input
+              <Input
                 type="date"
-                className={inp + " ml-1"}
+                className="w-auto"
+                aria-label="To date"
                 value={to}
                 min={from}
                 max={todayIso()}
@@ -98,77 +99,75 @@ export function ReportControls({ meta }: { meta: ReportMeta }) {
         )}
 
         {meta.hasBucket && (
-          <select
-            aria-label="Bucket"
-            className={inp}
+          <SegmentedControl
+            ariaLabel="Bucket"
             value={bucket}
-            onChange={(e) => setParam("bucket", e.target.value)}
-          >
-            {[
+            onChange={(v) => setParam("bucket", v)}
+            options={[
               { value: "day", label: "Daily" },
               { value: "week", label: "Weekly" },
               { value: "month", label: "Monthly" },
-            ].map((b) => (
-              <option key={b.value} value={b.value}>
-                {b.label}
-              </option>
-            ))}
-          </select>
+            ]}
+          />
         )}
 
         {meta.breakdowns && (
-          <select
-            aria-label="Breakdown"
-            className={inp}
-            value={breakdown}
-            onChange={(e) => setParam("breakdown", e.target.value)}
-          >
-            {meta.breakdowns.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <div className="w-44">
+            <Select
+              aria-label="Breakdown"
+              value={breakdown}
+              onChange={(e) => setParam("breakdown", e.target.value)}
+            >
+              {meta.breakdowns.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
         )}
 
         {meta.views && (
-          <select
-            aria-label="View"
-            className={inp}
-            value={view}
-            onChange={(e) => setParam("view", e.target.value)}
-          >
-            {meta.views.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <div className="w-44">
+            <Select
+              aria-label="View"
+              value={view}
+              onChange={(e) => setParam("view", e.target.value)}
+            >
+              {meta.views.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
         )}
 
         {meta.metrics && (
-          <select
-            aria-label="Metric"
-            className={inp}
-            value={metric}
-            onChange={(e) => setParam("metric", e.target.value)}
-          >
-            {meta.metrics.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <div className="w-36">
+            <Select
+              aria-label="Metric"
+              value={metric}
+              onChange={(e) => setParam("metric", e.target.value)}
+            >
+              {meta.metrics.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
         )}
 
         {meta.hasTopN && (
-          <label className="text-sm text-gray-600">
+          <label className="flex items-center gap-1.5 text-sm text-text-muted">
             Top
-            <input
+            <Input
               type="number"
               min={1}
               max={100}
-              className={inp + " ml-1 w-20"}
+              className="w-20"
+              aria-label="Top N"
               value={topN}
               onChange={(e) => setParam("top_n", e.target.value)}
             />
@@ -177,7 +176,7 @@ export function ReportControls({ meta }: { meta: ReportMeta }) {
       </div>
 
       {dateErr && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-error">
           {dateErr}
         </p>
       )}

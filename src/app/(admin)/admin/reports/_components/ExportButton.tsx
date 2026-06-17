@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Can } from "@/lib/permissions/Can";
 import { useCreateExport, useExportStatus } from "@/lib/api/hooks/reports";
 import type { ExportFormat } from "@/lib/api/schemas/reports";
@@ -27,9 +27,28 @@ export function ExportButton({ meta }: { meta: ReportMeta }) {
     );
 
   const state = status.data?.status;
-  const ready = state === "ready" && status.data?.file_url;
+  const fileUrl = status.data?.file_url ?? null;
+  const ready = state === "ready" && !!fileUrl;
   const failed = state === "failed" || create.isError;
   const busy = create.isPending || state === "processing";
+
+  // One-click download: the moment an export turns `ready`, trigger the download
+  // without a second click. The API serves the file with
+  // `Content-Disposition: attachment`, so a plain link navigation downloads it
+  // directly (PDF included) — no cross-origin fetch needed (static responses
+  // carry no CORS headers, so a fetch() blob would be blocked). `downloadedFor`
+  // guards against re-firing as the status query keeps returning `ready`.
+  const downloadedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready || !fileUrl || !exportId || downloadedFor.current === exportId) return;
+    downloadedFor.current = exportId;
+    const a = document.createElement("a");
+    a.href = fileUrl;
+    a.download = fileUrl.split("/").pop() ?? `${meta.key}-export`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }, [ready, fileUrl, exportId, meta.key]);
 
   return (
     <Can permission={REPORTS_EXPORT_PERMISSION}>
@@ -59,14 +78,17 @@ export function ExportButton({ meta }: { meta: ReportMeta }) {
           {busy && <span className="text-gray-500">Export is processing — we&apos;ll have it ready shortly.</span>}
           {failed && <span className="text-red-600">Export failed. Try again.</span>}
           {ready && (
-            <a
-              href={status.data!.file_url!}
-              className="font-medium text-brand-700 hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Download ready
-            </a>
+            <span className="text-gray-500">
+              Downloaded.{" "}
+              <a
+                href={fileUrl!}
+                className="font-medium text-brand-700 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Save again
+              </a>
+            </span>
           )}
         </p>
       </div>

@@ -1,21 +1,38 @@
 "use client";
 
+import { AlertTriangle, Boxes, PackageX, Layers } from "lucide-react";
 import { useInventoryReport } from "@/lib/api/hooks/reports";
 import type { InventoryLevelRow, InventoryMovement } from "@/lib/api/schemas/reports";
 import { BarBreakdownChart } from "@/components/charts";
+import { ChartCard, StatCard, StatusPill } from "@/components/ui";
 import type { ReportMeta } from "./catalog";
 import { useReportParams } from "./ReportControls";
-import { Column, DataTable, ReportState, Section, Stat } from "./primitives";
+import { Column, DataTable, ReportState, Section } from "./primitives";
 
 /**
  * Inventory report (FR-RPT-030/031). levels/low_stock/out_of_stock return a row
  * list; movement returns a received/sold/adjusted/restocked summary (and needs
- * a from/to range, supplied by ReportControls for the movement view).
+ * a from/to range, supplied by ReportControls for the movement view). KPI
+ * StatCards + Low/Out stock pills are derived from the rows (available vs
+ * reorder_point) — no data-layer change. Presentation only.
  */
 function isMovement(
   data: InventoryLevelRow[] | InventoryMovement | undefined,
 ): data is InventoryMovement {
   return !!data && !Array.isArray(data);
+}
+
+/** Stock status derived from available + reorder_point (no fabricated fields). */
+function stockStatus(r: InventoryLevelRow): "out-of-stock" | "low-stock" | "in-stock" {
+  const avail = r.available ?? r.on_hand;
+  if (avail != null && avail <= 0) return "out-of-stock";
+  if (
+    avail != null &&
+    r.reorder_point != null &&
+    avail <= r.reorder_point
+  )
+    return "low-stock";
+  return "in-stock";
 }
 
 export function InventoryReport({ meta }: { meta: ReportMeta }) {
@@ -25,6 +42,10 @@ export function InventoryReport({ meta }: { meta: ReportMeta }) {
   const movement = isMovement(data) ? data : undefined;
   const rows = Array.isArray(data) ? data : [];
 
+  const lowCount = rows.filter((r) => stockStatus(r) === "low-stock").length;
+  const outCount = rows.filter((r) => stockStatus(r) === "out-of-stock").length;
+  const onHandTotal = rows.reduce((s, r) => s + (r.on_hand ?? 0), 0);
+
   const cols: Column<InventoryLevelRow>[] = [
     { header: "SKU", cell: (r) => r.sku },
     { header: "Product", cell: (r) => r.product_title ?? "—" },
@@ -32,6 +53,7 @@ export function InventoryReport({ meta }: { meta: ReportMeta }) {
     { header: "On hand", align: "right", cell: (r) => r.on_hand ?? "—" },
     { header: "Reserved", align: "right", cell: (r) => r.reserved ?? "—" },
     { header: "Available", align: "right", cell: (r) => r.available ?? "—" },
+    { header: "Stock", cell: (r) => <StatusPill status={stockStatus(r)} /> },
   ];
 
   const movementChart = movement
@@ -43,32 +65,52 @@ export function InventoryReport({ meta }: { meta: ReportMeta }) {
       ]
     : [];
 
-  const isEmpty =
-    !isLoading && !isError && !movement && rows.length === 0;
+  const isEmpty = !isLoading && !isError && !movement && rows.length === 0;
 
   return (
     <ReportState isLoading={isLoading} isError={isError} isEmpty={isEmpty} onRetry={refetch}>
       {view === "movement" && movement ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="Received" value={String(movement.received)} />
-            <Stat label="Sold" value={String(movement.sold)} />
-            <Stat label="Adjusted" value={String(movement.adjusted)} />
-            <Stat label="Restocked" value={String(movement.restocked)} />
+            <StatCard label="Received" value={String(movement.received)} icon={Boxes} iconTone="success" />
+            <StatCard label="Sold" value={String(movement.sold)} icon={Layers} />
+            <StatCard label="Adjusted" value={String(movement.adjusted)} icon={AlertTriangle} iconTone="warning" />
+            <StatCard label="Restocked" value={String(movement.restocked)} icon={Boxes} iconTone="info" />
           </div>
-          <Section title="Movement">
+          <ChartCard
+            title="Movement"
+            dataTable={
+              <DataTable
+                caption="Inventory movement"
+                columns={[
+                  { header: "Type", cell: (r) => r.name },
+                  { header: "Units", align: "right", cell: (r) => r.value },
+                ]}
+                rows={movementChart}
+                rowKey={(r) => r.name}
+              />
+            }
+          >
             <BarBreakdownChart data={movementChart} valueLabel="Units" />
-          </Section>
+          </ChartCard>
         </div>
       ) : (
-        <Section title="Stock">
-          <DataTable
-            caption="Inventory levels"
-            columns={cols}
-            rows={rows}
-            rowKey={(r) => r.sku}
-          />
-        </Section>
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard label="Total SKUs" value={String(rows.length)} icon={Layers} />
+            <StatCard label="Low stock" value={String(lowCount)} icon={AlertTriangle} iconTone="warning" />
+            <StatCard label="Out of stock" value={String(outCount)} icon={PackageX} iconTone="error" />
+            <StatCard label="On-hand units" value={onHandTotal.toLocaleString("en-BD")} icon={Boxes} iconTone="info" />
+          </div>
+          <Section title="Stock">
+            <DataTable
+              caption="Inventory levels"
+              columns={cols}
+              rows={rows}
+              rowKey={(r) => r.sku}
+            />
+          </Section>
+        </div>
       )}
     </ReportState>
   );

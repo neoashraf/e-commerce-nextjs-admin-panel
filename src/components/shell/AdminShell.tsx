@@ -17,21 +17,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     // h-screen + overflow-hidden makes the shell own the full viewport height so
     // the sidebar and the main content scroll independently (the sidebar stays
     // put while only <main> scrolls), instead of the page scrolling as one unit.
-    <div className="flex h-screen overflow-hidden bg-[var(--background)]">
-      {/* Desktop sidebar — its own scroll region, independent of the content. */}
-      <aside className="no-scrollbar hidden w-64 shrink-0 overflow-y-auto border-r border-gray-200 bg-white md:block">
+    <div className="flex h-screen overflow-hidden bg-canvas">
+      {/* Desktop sidebar — the Sidebar owns its internal scroll (brand block stays put). */}
+      <aside className="hidden w-64 shrink-0 overflow-hidden border-r border-border bg-surface md:block">
         <Sidebar />
       </aside>
 
       {/* Mobile drawer */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-20 md:hidden">
+        <div className="fixed inset-0 z-30 md:hidden">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setMobileOpen(false)}
             aria-hidden
           />
-          <aside className="no-scrollbar absolute inset-y-0 left-0 w-64 overflow-y-auto bg-white shadow-xl">
+          <aside className="absolute inset-y-0 left-0 w-64 overflow-hidden bg-surface shadow-lg">
             <Sidebar onNavigate={() => setMobileOpen(false)} />
           </aside>
         </div>

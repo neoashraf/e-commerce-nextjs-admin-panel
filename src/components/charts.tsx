@@ -190,16 +190,67 @@ export interface NamedValue {
   value: number;
 }
 
-/** Bar chart for a single dimension (e.g. sales breakdown, top products). */
+/**
+ * Bar chart for a single dimension (e.g. sales breakdown, top products).
+ * `horizontal` flips to horizontal bars for rankings/top-N (design-system §9).
+ */
 export function BarBreakdownChart({
   data,
   valueLabel = "Value",
   currency = false,
+  horizontal = false,
 }: {
   data: NamedValue[];
   valueLabel?: string;
   currency?: boolean;
+  horizontal?: boolean;
 }) {
+  const fmtCurrency = (v: number | string) =>
+    `৳ ${Number(v).toLocaleString("en-BD")}`;
+  const tooltip = (
+    <Tooltip
+      cursor={{ fill: "#F1F5F9" }}
+      content={<ChartTooltip currencyKeys={currency ? ["value", valueLabel] : []} />}
+    />
+  );
+  const cells = data.map((_, i) => (
+    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+  ));
+
+  if (horizontal) {
+    return (
+      <ChartFrame height={Math.max(220, data.length * 36 + 24)}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+        >
+          <CartesianGrid horizontal={false} stroke={GRID_COLOR} />
+          <XAxis
+            type="number"
+            tick={AXIS_TICK}
+            stroke={GRID_COLOR}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={currency ? fmtCurrency : undefined}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={AXIS_TICK}
+            stroke={GRID_COLOR}
+            tickLine={false}
+            width={140}
+          />
+          {tooltip}
+          <Bar dataKey="value" name={valueLabel} radius={[0, 4, 4, 0]} isAnimationActive={false}>
+            {cells}
+          </Bar>
+        </BarChart>
+      </ChartFrame>
+    );
+  }
+
   return (
     <ChartFrame>
       <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -210,25 +261,11 @@ export function BarBreakdownChart({
           stroke={GRID_COLOR}
           tickLine={false}
           axisLine={false}
-          tickFormatter={
-            currency ? (v) => `৳ ${Number(v).toLocaleString("en-BD")}` : undefined
-          }
+          tickFormatter={currency ? fmtCurrency : undefined}
         />
-        <Tooltip
-          cursor={{ fill: "#F1F5F9" }}
-          content={
-            <ChartTooltip currencyKeys={currency ? ["value", valueLabel] : []} />
-          }
-        />
-        <Bar
-          dataKey="value"
-          name={valueLabel}
-          radius={[4, 4, 0, 0]}
-          isAnimationActive={false}
-        >
-          {data.map((_, i) => (
-            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-          ))}
+        {tooltip}
+        <Bar dataKey="value" name={valueLabel} radius={[4, 4, 0, 0]} isAnimationActive={false}>
+          {cells}
         </Bar>
       </BarChart>
     </ChartFrame>

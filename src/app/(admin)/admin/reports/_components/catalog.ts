@@ -1,3 +1,14 @@
+import {
+  BarChart3,
+  Boxes,
+  CreditCard,
+  type LucideIcon,
+  Package,
+  Search,
+  ShoppingCart,
+  TicketPercent,
+  Users,
+} from "lucide-react";
 import type { ReportKey } from "@/lib/api/schemas/reports";
 
 /**
@@ -21,6 +32,8 @@ export interface SelectOption {
 export interface ReportMeta {
   key: ReportKey;
   label: string;
+  /** Report-type glyph shown in the Reports tab sub-nav (design-system §8.8). */
+  icon: LucideIcon;
   description: string;
   /** Period range + bucket controls apply (sales/orders/products/customers/payments/promotions/search). */
   hasPeriod: boolean;
@@ -48,6 +61,7 @@ export const REPORT_CATALOG: ReportMeta[] = [
   {
     key: "sales",
     label: "Sales",
+    icon: BarChart3,
     description: "Revenue, orders & AOV over time, with breakdowns.",
     hasPeriod: true,
     hasBucket: true,
@@ -62,12 +76,14 @@ export const REPORT_CATALOG: ReportMeta[] = [
   {
     key: "orders",
     label: "Orders",
+    icon: ShoppingCart,
     description: "Order counts & value by status; cancellation & return rates.",
     hasPeriod: true,
   },
   {
     key: "products",
     label: "Products",
+    icon: Package,
     description: "Top sellers, by category, and slow movers.",
     hasPeriod: true,
     views: [
@@ -84,6 +100,7 @@ export const REPORT_CATALOG: ReportMeta[] = [
   {
     key: "inventory",
     label: "Inventory",
+    icon: Boxes,
     description: "Stock levels, low/out of stock, and movement summary.",
     hasPeriod: false,
     views: [
@@ -96,6 +113,7 @@ export const REPORT_CATALOG: ReportMeta[] = [
   {
     key: "customers",
     label: "Customers",
+    icon: Users,
     description: "New vs returning, repeat rate, and top lifetime value.",
     hasPeriod: true,
     views: [
@@ -107,18 +125,21 @@ export const REPORT_CATALOG: ReportMeta[] = [
   {
     key: "payments",
     label: "Payments",
+    icon: CreditCard,
     description: "Method split, paid online, COD collected & refunds.",
     hasPeriod: true,
   },
   {
     key: "promotions",
     label: "Promotions",
+    icon: TicketPercent,
     description: "Per-coupon redemptions, discount given & attributed sales.",
     hasPeriod: true,
   },
   {
     key: "search",
     label: "Search insights",
+    icon: Search,
     description: "Popular searches and zero-result queries.",
     hasPeriod: true,
     views: [

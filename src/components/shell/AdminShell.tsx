@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { PermissionBoundary } from "@/components/shell/PermissionBoundary";
+import { useAdminNotificationStream } from "@/lib/hooks/useAdminNotificationStream";
 
 /**
  * Admin shell layout: fixed sidebar rail on md+, slide-over drawer on mobile,
@@ -12,6 +13,9 @@ import { PermissionBoundary } from "@/components/shell/PermissionBoundary";
  */
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Real-time in-app notifications (new-order alerts): one SSE subscription for the whole shell.
+  useAdminNotificationStream();
 
   return (
     // h-screen + overflow-hidden makes the shell own the full viewport height so

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronDown, Menu, Search } from "lucide-react";
+import { ChevronDown, Menu, Search } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useAdminLogout } from "@/lib/api/hooks/useAuth";
+import { NotificationBell } from "@/components/shell/NotificationBell";
 
 /**
  * Admin top bar (design-system §7.2): mobile menu toggle, a left global search
@@ -84,17 +85,7 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-1 sm:flex-none">
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
-        >
-          <Bell className="h-5 w-5" aria-hidden="true" />
-          <span
-            className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-error ring-2 ring-surface"
-            aria-hidden="true"
-          />
-        </button>
+        <NotificationBell />
 
         <div className="relative">
           <button

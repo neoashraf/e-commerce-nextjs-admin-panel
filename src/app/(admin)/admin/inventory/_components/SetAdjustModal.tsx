@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { AlertTriangle, X } from "lucide-react";
 import { useAdjustStock, useReceiveStock } from "@/lib/api/hooks/useInventory";
 import type { StockRow } from "@/lib/api/schemas/inventory";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
+import { Button, Input, SegmentedControl } from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 type Mode = "receive" | "adjust";
 
@@ -14,6 +17,7 @@ type Mode = "receive" | "adjust";
  * POST …/adjust). Live resulting on-hand/available preview, mandatory reason,
  * Save disabled until valid. Server-confirmed — waits for 200 then the list
  * refetch reconciles the row; 409 NEGATIVE_ON_HAND aborts without mutating.
+ * Re-skinned onto the design tokens; data layer untouched (AD6).
  */
 export function SetAdjustModal({ row, onClose }: { row: StockRow; onClose: () => void }) {
   const receive = useReceiveStock();
@@ -26,6 +30,7 @@ export function SetAdjustModal({ row, onClose }: { row: StockRow; onClose: () =>
 
   const qtyId = useId();
   const reasonId = useId();
+  const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   // Restore focus to the triggering row's action on close (a11y §10).
@@ -109,126 +114,140 @@ export function SetAdjustModal({ row, onClose }: { row: StockRow; onClose: () =>
     }
   }
 
-  const inp =
-    "h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
+  const negativeResult = resultingAvailable < 0;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onKeyDown={onKeyDown}>
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
+      <div
+        className="absolute inset-0 bg-black/40 [animation:scrimIn_180ms_ease-out]"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="set-adjust-title"
-        className="relative w-full max-w-sm rounded-lg bg-white p-5 shadow-xl"
+        aria-labelledby={titleId}
+        className="relative w-full max-w-[460px] overflow-hidden rounded-xl bg-surface shadow-lg"
       >
-        <h2 id="set-adjust-title" className="text-base font-semibold text-gray-900">
-          Set / adjust stock — {row.sku_code}
-        </h2>
-        <p className="mt-0.5 text-sm text-gray-500">
-          Current on-hand: <strong>{row.on_hand}</strong> · reserved: {row.reserved}
-        </p>
-
-        {/* Mode segmented control (arrow-navigable via Tab between buttons). */}
-        <div className="mt-4 inline-flex rounded-md border border-gray-300 p-0.5 text-sm" role="group" aria-label="Mode">
-          {(["receive", "adjust"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              aria-pressed={mode === m}
-              onClick={() => switchMode(m)}
-              className={
-                "rounded px-3 py-1.5 font-medium capitalize " +
-                (mode === m ? "bg-brand-600 text-white" : "text-gray-600 hover:bg-gray-50")
-              }
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-        <p className="mt-1 text-xs text-gray-400">
-          {mode === "receive" ? "Receive adds units to on-hand." : "Adjust corrects up or down (use a minus for losses)."}
-        </p>
-
-        <label htmlFor={qtyId} className="mt-4 block">
-          <span className="mb-1 block text-sm font-medium text-gray-900">
-            {mode === "receive" ? "Quantity" : "Quantity delta"}
-          </span>
-          <input
-            ref={firstFieldRef}
-            id={qtyId}
-            className={inp}
-            type="number"
-            inputMode="numeric"
-            step={1}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            aria-invalid={!!qtyError}
-            aria-describedby={qtyError ? `${qtyId}-err` : `${qtyId}-help`}
-            placeholder={mode === "receive" ? "e.g. 20" : "e.g. -3"}
-          />
-          {qtyError ? (
-            <span id={`${qtyId}-err`} role="alert" className="mt-1 block text-xs text-red-600">
-              {qtyError}
-            </span>
-          ) : (
-            <span id={`${qtyId}-help`} className="mt-1 block text-xs text-gray-400">
-              {mode === "receive" ? "Units to add to on-hand." : "Use a minus for losses (e.g. −2)."}
-            </span>
-          )}
-        </label>
-
-        <label htmlFor={reasonId} className="mt-3 block">
-          <span className="mb-1 block text-sm font-medium text-gray-900">Reason</span>
-          <input
-            id={reasonId}
-            className={inp}
-            maxLength={160}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            onBlur={() => setTouchedReason(true)}
-            aria-invalid={!!reasonError}
-            aria-describedby={reasonError ? `${reasonId}-err` : `${reasonId}-help`}
-            placeholder="e.g. supplier delivery, damaged, recount"
-          />
-          {reasonError ? (
-            <span id={`${reasonId}-err`} role="alert" className="mt-1 block text-xs text-red-600">
-              {reasonError}
-            </span>
-          ) : (
-            <span id={`${reasonId}-help`} className="mt-1 block text-xs text-gray-400">
-              e.g. supplier delivery, damaged, recount.
-            </span>
-          )}
-        </label>
-
-        <p aria-live="polite" className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
-          Resulting on-hand: <strong>{resultingOnHand}</strong> · available: <strong>{resultingAvailable}</strong>
-        </p>
-
-        {serverError && (
-          <p role="alert" aria-live="assertive" className="mt-2 text-sm text-red-600">
-            {serverError}
-          </p>
-        )}
-
-        <div className="mt-5 flex justify-end gap-3">
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="min-w-0">
+            <h2 id={titleId} className="text-[15px] font-semibold text-text">
+              Set / adjust stock — {row.sku_code}
+            </h2>
+            <p className="mt-0.5 text-sm text-text-muted">
+              Current on-hand <strong className="font-semibold text-text-secondary tabular-nums">{row.on_hand}</strong> · reserved{" "}
+              <span className="tabular-nums">{row.reserved}</span>
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            aria-label="Close"
+            className="-mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
           >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="px-5 py-5">
+          <SegmentedControl<Mode>
+            ariaLabel="Mode"
+            options={[
+              { value: "receive", label: "Receive" },
+              { value: "adjust", label: "Adjust" },
+            ]}
+            value={mode}
+            onChange={switchMode}
+          />
+          <p className="mt-1.5 text-xs text-text-muted">
+            {mode === "receive"
+              ? "Receive adds units to on-hand."
+              : "Adjust corrects up or down (use a minus for losses)."}
+          </p>
+
+          <label htmlFor={qtyId} className="mt-4 block">
+            <span className="mb-1.5 block text-sm font-medium text-text">
+              {mode === "receive" ? "Quantity" : "Quantity delta"}
+            </span>
+            <Input
+              ref={firstFieldRef}
+              id={qtyId}
+              type="number"
+              inputMode="numeric"
+              step={1}
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              error={qtyError ?? undefined}
+              helper={
+                mode === "receive" ? "Units to add to on-hand." : "Use a minus for losses (e.g. −2)."
+              }
+              placeholder={mode === "receive" ? "e.g. 20" : "e.g. -3"}
+            />
+          </label>
+
+          <label htmlFor={reasonId} className="mt-3 block">
+            <span className="mb-1.5 block text-sm font-medium text-text">Reason</span>
+            <textarea
+              id={reasonId}
+              rows={2}
+              maxLength={160}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              onBlur={() => setTouchedReason(true)}
+              aria-invalid={reasonError ? true : undefined}
+              aria-describedby={reasonError ? `${reasonId}-err` : undefined}
+              placeholder="Why is stock changing?"
+              className={cn(
+                "w-full resize-y rounded-md border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1",
+                reasonError ? "border-error" : "border-border-strong",
+              )}
+            />
+            {reasonError && (
+              <span id={`${reasonId}-err`} role="alert" className="mt-1 block text-xs text-error">
+                {reasonError}
+              </span>
+            )}
+          </label>
+
+          <div
+            aria-live="polite"
+            className="mt-4 flex gap-3 rounded-lg border border-border bg-surface-subtle p-3"
+          >
+            <div className="flex-1">
+              <p className="text-eyebrow uppercase tracking-wide text-text-muted">Resulting on-hand</p>
+              <p className="mt-0.5 text-xl font-bold tabular-nums text-text">{resultingOnHand}</p>
+            </div>
+            <div className="w-px bg-border" />
+            <div className="flex-1">
+              <p className="text-eyebrow uppercase tracking-wide text-text-muted">Resulting available</p>
+              <p className={cn("mt-0.5 text-xl font-bold tabular-nums", negativeResult ? "text-error" : "text-text")}>
+                {resultingAvailable}
+                <span className="ml-1 text-xs font-medium text-text-faint">· {row.reserved} reserved</span>
+              </p>
+            </div>
+          </div>
+
+          {serverError && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="mt-3 flex items-start gap-2 rounded-lg border border-error/30 bg-error-50 px-3 py-2.5 text-[13px] text-error"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{serverError}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-3 border-t border-border px-5 py-4">
+          <Button variant="secondary" onClick={onClose} disabled={pending}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!valid || pending}
-            aria-busy={pending}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-          >
-            {pending ? "Saving…" : "Save"}
-          </button>
+          </Button>
+          <Button onClick={onSave} disabled={!valid || pending} loading={pending}>
+            Save
+          </Button>
         </div>
       </div>
     </div>

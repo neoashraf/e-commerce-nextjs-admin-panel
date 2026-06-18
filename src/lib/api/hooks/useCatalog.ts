@@ -337,8 +337,8 @@ export function useEditorFamily(familyId: string) {
 /**
  * Upload a product image (multipart). `is_primary` clears the no_primary_image
  * publish blocker. Invalidates the product so primary_image_id + images[] refresh,
- * which re-renders the editor gallery. NOTE: the admin API still has no delete/reorder
- * image endpoints — those need BE work (flagged); upload + view + set-primary work.
+ * which re-renders the editor gallery. NOTE: reorder is still flagged for BE; upload + view +
+ * set-primary + delete are wired.
  */
 export function useUploadProductImage(productId: string) {
   const qc = useQueryClient();
@@ -350,6 +350,45 @@ export function useUploadProductImage(productId: string) {
       if (input.is_primary) form.append("is_primary", "true");
       return api.postForm(`/admin/products/${productId}/images`, form, { schema: _uirs });
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}
+
+/**
+ * Promote an already-uploaded image to primary (PATCH .../images/{imageId}/primary). Invalidates the
+ * product so the gallery + primary_image_id refresh; the storefront PDP reflects it on its next fetch.
+ */
+export function useSetProductImagePrimary(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (imageId: string) =>
+      api.patch(`/admin/products/${productId}/images/${imageId}/primary`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}
+
+/** Edit an existing image's alt text (PATCH .../images/{imageId}). Invalidates the product to refresh. */
+export function useUpdateProductImageAlt(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { imageId: string; alt_text: string }) =>
+      api.patch(`/admin/products/${productId}/images/${input.imageId}`, {
+        alt_text: input.alt_text,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}
+
+/**
+ * Delete an image (DELETE .../images/{imageId}). If the deleted image was primary, the BE reassigns
+ * primary to the next image (or clears it when none remain). Invalidates the product so the gallery +
+ * primary_image_id refresh.
+ */
+export function useDeleteProductImage(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (imageId: string) =>
+      api.delete<void>(`/admin/products/${productId}/images/${imageId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
   });
 }

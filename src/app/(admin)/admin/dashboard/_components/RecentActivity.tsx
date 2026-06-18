@@ -7,6 +7,7 @@ import {
   useRecentOrders,
 } from "@/lib/api/hooks/dashboard";
 import { formatBDT, formatDateTime } from "@/lib/format";
+import { Skeleton } from "@/components/ui";
 import { Panel } from "./widgets";
 
 /**
@@ -47,21 +48,26 @@ function ListState({
   children: React.ReactNode;
 }) {
   if (isLoading)
-    return <div className="h-40 animate-pulse rounded-lg bg-gray-100" />;
+    return (
+      <div className="space-y-2 p-1">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
+      </div>
+    );
   if (isError)
     return (
-      <p className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+      <p className="p-3 text-sm text-text-muted" role="alert">
         Couldn&apos;t load this list.
       </p>
     );
   if (isEmpty)
-    return (
-      <p className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-        Nothing recent.
-      </p>
-    );
+    return <p className="p-3 text-sm text-text-muted">Nothing recent.</p>;
   return <>{children}</>;
 }
+
+const ROW =
+  "flex items-center justify-between gap-3 rounded-md px-2 py-2.5 text-sm transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600";
 
 function RecentOrders() {
   const { data, isLoading, isError } = useRecentOrders();
@@ -69,22 +75,21 @@ function RecentOrders() {
   return (
     <Panel title="Recent orders">
       <ListState isLoading={isLoading} isError={isError} isEmpty={rows.length === 0}>
-        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+        <ul className="space-y-0.5">
           {rows.map((o) => (
             <li key={o.order_no}>
-              <Link
-                href={`/admin/orders/${o.order_no}`}
-                className="flex items-center justify-between p-3 text-sm hover:bg-gray-50"
-              >
+              <Link href={`/admin/orders/${o.order_no}`} className={ROW}>
                 <span className="min-w-0">
-                  <span className="block font-medium text-gray-900">{o.order_no}</span>
-                  <span className="block truncate text-xs text-gray-500">
+                  <span className="block font-medium text-accent-700">{o.order_no}</span>
+                  <span className="block truncate text-xs text-text-muted">
                     {o.customer ?? "—"}
                     {o.placed_at ? ` · ${formatDateTime(o.placed_at)}` : ""}
                   </span>
                 </span>
                 {o.grand_total != null && (
-                  <span className="shrink-0 text-gray-700">{formatBDT(Number(o.grand_total))}</span>
+                  <span className="shrink-0 tabular-nums text-text-secondary">
+                    {formatBDT(Number(o.grand_total))}
+                  </span>
                 )}
               </Link>
             </li>
@@ -101,19 +106,16 @@ function RecentCustomers() {
   return (
     <Panel title="New customers">
       <ListState isLoading={isLoading} isError={isError} isEmpty={rows.length === 0}>
-        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+        <ul className="space-y-0.5">
           {rows.map((c) => (
             <li key={c.customer_id}>
-              <Link
-                href={`/admin/customers/${c.customer_id}`}
-                className="flex items-center justify-between p-3 text-sm hover:bg-gray-50"
-              >
+              <Link href={`/admin/customers/${c.customer_id}`} className={ROW}>
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-gray-900">{c.name ?? "—"}</span>
-                  {c.phone && <span className="block text-xs text-gray-500">{c.phone}</span>}
+                  <span className="block truncate font-medium text-text">{c.name ?? "—"}</span>
+                  {c.phone && <span className="block text-xs text-text-muted">{c.phone}</span>}
                 </span>
                 {c.created_at && (
-                  <span className="shrink-0 text-xs text-gray-400">{formatDateTime(c.created_at)}</span>
+                  <span className="shrink-0 text-xs text-text-faint">{formatDateTime(c.created_at)}</span>
                 )}
               </Link>
             </li>
@@ -130,25 +132,22 @@ function RecentLeads() {
   return (
     <Panel title="New leads">
       <ListState isLoading={isLoading} isError={isError} isEmpty={rows.length === 0}>
-        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+        <ul className="space-y-0.5">
           {rows.map((l, i) => {
             const href = l.reference ? `/admin/leads/${l.reference}` : "/admin/leads";
             return (
               <li key={l.reference ?? i}>
-                <Link
-                  href={href}
-                  className="flex items-center justify-between p-3 text-sm hover:bg-gray-50"
-                >
+                <Link href={href} className={ROW}>
                   <span className="min-w-0">
-                    <span className="block truncate font-medium text-gray-900">
+                    <span className="block truncate font-medium text-text">
                       {l.subject ?? l.name ?? "Enquiry"}
                     </span>
                     {l.name && l.subject && (
-                      <span className="block truncate text-xs text-gray-500">{l.name}</span>
+                      <span className="block truncate text-xs text-text-muted">{l.name}</span>
                     )}
                   </span>
                   {l.created_at && (
-                    <span className="shrink-0 text-xs text-gray-400">{formatDateTime(l.created_at)}</span>
+                    <span className="shrink-0 text-xs text-text-faint">{formatDateTime(l.created_at)}</span>
                   )}
                 </Link>
               </li>

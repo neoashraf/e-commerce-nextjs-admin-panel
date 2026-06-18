@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { Button } from "./Button";
 
 /**
  * Accessible confirm dialog for destructive admin actions (reused across admin
  * screens). role="dialog" aria-modal, focus moves in on open, Esc + scrim
- * dismiss, focus restored to the trigger on close.
+ * dismiss, focus restored to the trigger on close. Styled to the design system.
  */
 export function ConfirmDialog({
   open,
@@ -50,25 +51,30 @@ export function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={pending ? undefined : onClose} aria-hidden />
-      <div ref={panelRef} role="dialog" aria-modal="true" className="relative w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-        <div className="mt-2 text-sm text-gray-600">{message}</div>
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={pending ? undefined : onClose}
+        aria-hidden
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full max-w-sm rounded-xl border border-border bg-surface p-5 shadow-lg"
+      >
+        <h2 className="text-[15px] font-semibold text-text">{title}</h2>
+        <div className="mt-2 text-sm text-text-secondary">{message}</div>
         <div className="mt-5 flex justify-end gap-3">
-          <button type="button" onClick={onClose} disabled={pending} className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60">
+          <Button variant="secondary" onClick={onClose} disabled={pending}>
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={danger ? "destructive" : "primary"}
             onClick={onConfirm}
-            disabled={pending}
-            className={
-              "rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 " +
-              (danger ? "bg-red-600 hover:bg-red-700" : "bg-brand-600 hover:bg-brand-700")
-            }
+            loading={pending}
           >
-            {pending ? "Working…" : confirmLabel}
-          </button>
+            {confirmLabel}
+          </Button>
         </div>
       </div>
     </div>

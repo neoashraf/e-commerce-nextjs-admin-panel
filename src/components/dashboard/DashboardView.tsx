@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RefreshCw } from "lucide-react";
 import {
   useDashboardRefresh,
   useDashboardSummary,
@@ -17,6 +18,7 @@ import {
   TopProducts,
   TrendPanel,
 } from "@/app/(admin)/admin/dashboard/_components/widgets";
+import { Button, Card, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 
 /**
  * Admin dashboard (dash-fe + dash-fe-completion). Period-scoped, role-aware
@@ -48,18 +50,23 @@ export function DashboardView() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
-        <div className="flex items-end gap-3">
+        <div>
+          <h1 className="text-[22px] font-bold leading-7 text-text">Dashboard</h1>
+          <p className="mt-0.5 text-sm text-text-muted">
+            Store performance, alerts, and recent activity at a glance.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
           <PeriodSelector value={period} onChange={setPeriod} />
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => refresh.mutate(period)}
             disabled={refresh.isPending || customInvalid}
             aria-busy={refresh.isPending}
-            className="h-10 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            leadingIcon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
           >
             {refresh.isPending ? "Refreshing…" : "Refresh"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -69,29 +76,25 @@ export function DashboardView() {
       </p>
 
       {customInvalid ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-12 text-center">
-          <p className="text-sm text-gray-500">Choose a valid date range to load the dashboard.</p>
-        </div>
+        <Card>
+          <EmptyState title="Choose a valid date range to load the dashboard." />
+        </Card>
       ) : isLoading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-24 animate-pulse rounded-lg bg-gray-100" />
+              <Skeleton key={i} className="h-28 rounded-lg" />
             ))}
           </div>
-          <div className="h-72 animate-pulse rounded-lg bg-gray-100" />
+          <Skeleton className="h-72 rounded-lg" />
         </div>
       ) : isError ? (
-        <div className="py-12 text-center">
-          <p className="text-sm text-gray-600">Couldn&apos;t load the dashboard.</p>
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="mt-2 text-sm font-medium text-brand-700 hover:underline"
-          >
-            Try again
-          </button>
-        </div>
+        <Card>
+          <ErrorState
+            description="Couldn't load the dashboard."
+            onRetry={() => refetch()}
+          />
+        </Card>
       ) : summary ? (
         <>
           {shows("kpis") && summary.kpis && <KpiCards kpis={summary.kpis} />}
@@ -117,7 +120,7 @@ export function DashboardView() {
           />
 
           {summary.as_of && (
-            <p className="text-sm text-gray-500">As of {formatDateTime(summary.as_of)}</p>
+            <p className="text-sm text-text-muted">As of {formatDateTime(summary.as_of)}</p>
           )}
         </>
       ) : null}

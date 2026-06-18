@@ -1,7 +1,15 @@
 "use client";
 
+import Link from "next/link";
+import { CalendarClock } from "lucide-react";
 import type { ReportKey } from "@/lib/api/schemas/reports";
-import { getReportMeta, type ReportMeta } from "./catalog";
+import { Can } from "@/lib/permissions/Can";
+import { Button } from "@/components/ui";
+import {
+  getReportMeta,
+  REPORTS_SCHEDULE_PERMISSION,
+  type ReportMeta,
+} from "./catalog";
 import { ReportControls } from "./ReportControls";
 import { SalesReport } from "./SalesReport";
 import { OrdersReport } from "./OrdersReport";
@@ -41,10 +49,23 @@ export function ReportViewer({ reportKey }: { reportKey: ReportKey }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">{meta.label}</h1>
-          <p className="mt-0.5 text-sm text-gray-500">{meta.description}</p>
+          <h1 className="text-[22px] font-bold leading-7 text-text">{meta.label}</h1>
+          <p className="mt-0.5 text-sm text-text-muted">{meta.description}</p>
         </div>
-        <ExportButton meta={meta} />
+        <div className="flex items-start gap-2">
+          <Can permission={REPORTS_SCHEDULE_PERMISSION}>
+            <Link href="/admin/reports/schedules">
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<CalendarClock className="h-4 w-4" aria-hidden="true" />}
+              >
+                Schedule digest
+              </Button>
+            </Link>
+          </Can>
+          <ExportButton meta={meta} />
+        </div>
       </div>
 
       <ReportControls meta={meta} />

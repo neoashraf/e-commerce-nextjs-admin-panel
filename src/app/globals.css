@@ -2,9 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Commerce Admin design system — token layer.
+ * The whole system is driven by CSS custom properties (design-system §2/§3).
+ * White-label: a client re-brands by overriding ONLY the accent ramp (and the
+ * logo). Neutrals + semantics + the data-viz family are fixed across clients.
+ */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* ---- The ONLY things a client overrides (accent ramp) — Indigo default ---- */
+  --accent-50: #eef2ff;
+  --accent-100: #e0e7ff;
+  --accent-500: #6366f1;
+  --accent-600: #4f46e5; /* primary: buttons, active nav, links, focus ring */
+  --accent-700: #4338ca; /* hover / pressed */
+  --accent-fg: #ffffff; /* text/icon placed ON the accent fill */
+
+  /* ---- Neutral foundation (slate family, fixed) ---- */
+  --canvas: #f6f7f9;
+  --surface: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --surface-hover: #f8fafc;
+  --border: #e5e8ec;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+
+  /* base control radius; cards = 0.75rem (mapped in tailwind) */
+  --radius: 0.5rem;
+
+  /* Back-compat: legacy vars some code may still reference. */
+  --background: var(--canvas);
+  --foreground: var(--text);
 }
 
 html,
@@ -14,13 +44,44 @@ body {
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--text);
+  background: var(--canvas);
+  /* Tabular (lining) numerals on all data — design-system §4 (non-negotiable). */
+  font-feature-settings: "tnum" 1, "cv01" 1;
   -webkit-font-smoothing: antialiased;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Drawer / scrim motion (design-system §8.9). Slides 200ms ease-out; gated on
+   prefers-reduced-motion so a fade replaces the slide and the scrim still fades in. */
+@keyframes drawerIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes scrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes drawerIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }
 
 @layer utilities {

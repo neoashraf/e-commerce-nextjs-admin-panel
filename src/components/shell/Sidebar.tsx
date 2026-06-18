@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Store } from "lucide-react";
 import { NAV_SECTIONS } from "@/config/nav";
 import { useAuthStore } from "@/lib/stores/auth";
 import { cn } from "@/lib/cn";
@@ -15,8 +14,18 @@ import { cn } from "@/lib/cn";
  * Renders only the nav items the signed-in admin has permission for (permissions
  * come from GET /admin/me). On mobile it slides in over the content; on md+ it's
  * a fixed rail (handled by the shell layout).
+ *
+ * When `collapsed` is true the rail is an icon-only strip: the brand wordmark and
+ * section headers/labels fade out and the icons center. Items keep their full
+ * label as a native `title` tooltip so the rail stays usable when collapsed.
  */
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+export function Sidebar({
+  onNavigate,
+  collapsed = false,
+}: {
+  onNavigate?: () => void;
+  collapsed?: boolean;
+}) {
   const pathname = usePathname();
   const admin = useAuthStore((s) => s.admin);
   const permissions = admin?.permissions ?? [];
@@ -28,23 +37,44 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <nav className="flex h-full flex-col">
-      {/* Brand block — aligned to the topbar height (§7.1). */}
-      <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent-600 text-accent-fg">
-          <Store className="h-5 w-5" aria-hidden="true" />
+      {/* Brand block — dark "C" tile + wordmark, aligned to the topbar height. */}
+      <div
+        className={cn(
+          "flex h-14 items-center gap-2.5 border-b border-border",
+          collapsed ? "justify-center px-0" : "px-4",
+        )}
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-text text-[15px] font-bold tracking-tight text-surface">
+          C
         </span>
-        <span className="text-[15px] font-semibold text-text">Commerce Admin</span>
+        {!collapsed && (
+          <span className="flex min-w-0 flex-col leading-[1.15]">
+            <span className="truncate text-[13.5px] font-bold text-text">
+              Commerce Admin
+            </span>
+            <span className="truncate text-[10.5px] tracking-wide text-text-faint">
+              White-label console
+            </span>
+          </span>
+        )}
       </div>
 
-      <div className="no-scrollbar flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
+      <div
+        className={cn(
+          "no-scrollbar flex flex-1 flex-col gap-5 overflow-y-auto py-4",
+          collapsed ? "px-2" : "px-3",
+        )}
+      >
         {NAV_SECTIONS.map((section) => {
           const items = section.items.filter((i) => canSee(i.permission));
           if (items.length === 0) return null;
           return (
             <div key={section.title}>
-              <p className="px-2 pb-1.5 text-eyebrow uppercase tracking-wide text-text-faint">
-                {section.title}
-              </p>
+              {!collapsed && (
+                <p className="px-2 pb-1.5 text-eyebrow uppercase tracking-wide text-text-faint">
+                  {section.title}
+                </p>
+              )}
               <ul className="space-y-0.5">
                 {items.map((item) => {
                   const active =
@@ -56,10 +86,13 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                       <Link
                         href={item.href}
                         onClick={onNavigate}
+                        title={collapsed ? item.label : undefined}
+                        aria-label={collapsed ? item.label : undefined}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "relative flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors",
+                          "relative flex items-center gap-2.5 rounded-md py-2 text-sm transition-colors",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
+                          collapsed ? "justify-center px-2" : "px-2",
                           active
                             ? "bg-accent-50 font-semibold text-accent-700"
                             : "text-text-secondary hover:bg-surface-hover hover:text-text",
@@ -78,7 +111,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                           )}
                           aria-hidden="true"
                         />
-                        <span className="truncate">{item.label}</span>
+                        {!collapsed && (
+                          <span className="truncate">{item.label}</span>
+                        )}
                       </Link>
                     </li>
                   );

@@ -2,45 +2,21 @@
 
 import Link from "next/link";
 import type { StockRow } from "@/lib/api/schemas/inventory";
+import {
+  StatusPill,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  type SortDir as PillSortDir,
+} from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { RowActionsMenu } from "./RowActionsMenu";
-import { optionsOrFallback, STATUS_BADGE, type SortDir, type SortKey } from "./shared";
+import { optionsOrFallback, STATUS_LABEL, type SortDir, type SortKey } from "./shared";
 
-/** Sortable column header (Enter/Space operable, a11y §10). */
-function SortHeader({
-  label,
-  col,
-  sort,
-  dir,
-  onSort,
-  align = "left",
-}: {
-  label: string;
-  col: SortKey;
-  sort: SortKey | null;
-  dir: SortDir;
-  onSort: (col: SortKey) => void;
-  align?: "left" | "right";
-}) {
-  const active = sort === col;
-  return (
-    <th
-      scope="col"
-      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-      className={"py-2 font-medium " + (align === "right" ? "pr-3 text-right" : "pr-4")}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(col)}
-        className={"inline-flex items-center gap-1 hover:text-gray-700 " + (active ? "text-gray-700" : "")}
-      >
-        {label}
-        <span aria-hidden className="text-[10px]">{active ? (dir === "asc" ? "▲" : "▼") : "↕"}</span>
-      </button>
-    </th>
-  );
-}
-
-/** Desktop stock data table (≥1024px) — design §4. */
+/** Desktop stock data table (≥1024px) on the AD0 `Table` (design §8.6). */
 export function StockTable({
   rows,
   sort,
@@ -56,68 +32,81 @@ export function StockTable({
   onSetAdjust: (row: StockRow) => void;
   onEditThreshold: (row: StockRow) => void;
 }) {
+  const sortFor = (col: SortKey): PillSortDir => (sort === col ? dir : null);
+
   return (
-    <table className="hidden w-full text-sm lg:table">
-      <thead>
-        <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-          <SortHeader label="Product / SKU" col="product" sort={sort} dir={dir} onSort={onSort} />
-          <th scope="col" className="py-2 pr-4 font-medium">Options</th>
-          <th scope="col" className="py-2 pr-3 text-right font-medium">On-hand</th>
-          <th scope="col" className="py-2 pr-3 text-right font-medium">Reserved</th>
-          <SortHeader label="Available" col="available" sort={sort} dir={dir} onSort={onSort} align="right" />
-          <th scope="col" className="py-2 pr-3 text-right font-medium">Threshold</th>
-          <SortHeader label="Status" col="status" sort={sort} dir={dir} onSort={onSort} />
-          <th scope="col" className="py-2 font-medium">
-            <span className="sr-only">Actions</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => {
-          const badge = STATUS_BADGE[r.status];
-          const negative = r.available < 0;
-          return (
-            <tr key={r.variant_id} className="border-b border-gray-100 align-top">
-              <td className="max-w-[16rem] py-3 pr-4">
-                {r.product_id ? (
-                  <Link
-                    href={`/admin/products/${r.product_id}`}
-                    title={r.product_title ?? r.sku_code}
-                    className="block truncate font-medium text-gray-900 hover:text-brand-700 hover:underline"
-                  >
-                    {r.product_title ?? r.sku_code}
-                  </Link>
-                ) : (
-                  <span title={r.product_title ?? r.sku_code} className="block truncate font-medium text-gray-900">
-                    {r.product_title ?? r.sku_code}
+    <div className="hidden lg:block">
+      <Table className="min-w-[920px]">
+        <THead>
+          <TR hover={false}>
+            <TH sort={sortFor("product")} onSort={() => onSort("product")}>
+              Product / SKU
+            </TH>
+            <TH>Options</TH>
+            <TH numeric>On-hand</TH>
+            <TH numeric>Reserved</TH>
+            <TH numeric sort={sortFor("available")} onSort={() => onSort("available")}>
+              Available
+            </TH>
+            <TH numeric>Threshold</TH>
+            <TH sort={sortFor("status")} onSort={() => onSort("status")}>
+              Status
+            </TH>
+            <TH className="w-14">
+              <span className="sr-only">Actions</span>
+            </TH>
+          </TR>
+        </THead>
+        <TBody>
+          {rows.map((r) => {
+            const negative = r.available < 0;
+            return (
+              <TR key={r.variant_id}>
+                <TD className="max-w-[16rem]">
+                  {r.product_id ? (
+                    <Link
+                      href={`/admin/products/${r.product_id}`}
+                      title={r.product_title ?? r.sku_code}
+                      className="block truncate font-medium text-text hover:text-accent-700 hover:underline"
+                    >
+                      {r.product_title ?? r.sku_code}
+                    </Link>
+                  ) : (
+                    <span title={r.product_title ?? r.sku_code} className="block truncate font-medium text-text">
+                      {r.product_title ?? r.sku_code}
+                    </span>
+                  )}
+                  <span className="block text-xs text-text-faint">{r.sku_code}</span>
+                </TD>
+                <TD className="text-xs text-text-muted">{optionsOrFallback(r)}</TD>
+                <TD numeric>{r.on_hand}</TD>
+                <TD numeric className="text-text-faint">{r.reserved}</TD>
+                <TD numeric>
+                  <span className="inline-flex items-center justify-end gap-1.5">
+                    {negative && (
+                      <span
+                        title="Available is negative — reserved exceeds on-hand"
+                        className="h-1.5 w-1.5 rounded-full bg-error ring-[3px] ring-error-50"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className={cn("font-semibold", negative ? "text-error" : "text-text")}>
+                      {r.available}
+                    </span>
                   </span>
-                )}
-                <span className="block text-xs text-gray-400">{r.sku_code}</span>
-              </td>
-              <td className="py-3 pr-4 text-xs text-gray-500">{optionsOrFallback(r)}</td>
-              <td className="py-3 pr-3 text-right text-gray-700">{r.on_hand}</td>
-              <td className="py-3 pr-3 text-right text-gray-400">{r.reserved}</td>
-              <td className={"py-3 pr-3 text-right " + (negative ? "font-semibold text-red-600" : "text-gray-700")}>
-                {r.available}
-                {negative && (
-                  <span title="Available is negative — corrections needed" className="ml-1 text-red-600" aria-hidden>
-                    ●
-                  </span>
-                )}
-              </td>
-              <td className="py-3 pr-3 text-right text-gray-500">{r.low_stock_threshold}</td>
-              <td className="py-3 pr-4">
-                <span className={"inline-block rounded-full px-2 py-0.5 text-xs font-medium " + badge.cls}>
-                  {badge.label}
-                </span>
-              </td>
-              <td className="py-3 text-right">
-                <RowActionsMenu row={r} onSetAdjust={onSetAdjust} onEditThreshold={onEditThreshold} />
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+                </TD>
+                <TD numeric className="text-text-muted">{r.low_stock_threshold}</TD>
+                <TD>
+                  <StatusPill status={r.status} label={STATUS_LABEL[r.status]} />
+                </TD>
+                <TD className="text-right">
+                  <RowActionsMenu row={r} onSetAdjust={onSetAdjust} onEditThreshold={onEditThreshold} />
+                </TD>
+              </TR>
+            );
+          })}
+        </TBody>
+      </Table>
+    </div>
   );
 }

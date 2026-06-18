@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { Gauge, History, MoreHorizontal, SlidersHorizontal } from "lucide-react";
 import { Can } from "@/lib/permissions/Can";
 import type { StockRow } from "@/lib/api/schemas/inventory";
+import { cn } from "@/lib/cn";
 import { STOCK_MUTATE_PERMISSION } from "./shared";
 
 /**
- * Per-row "⋯" actions menu (design §5). Gated by the mutate permission — when
- * absent the menu is not rendered, leaving the row read-only. Keyboard:
- * Enter/Space opens, Escape closes, focus returns to the trigger.
+ * Per-row "⋯" actions menu (design §5). Set/adjust + Edit threshold are gated by
+ * the mutate permission; "View movements" (read-only navigation) is always
+ * shown so the menu still renders for read-only roles. Keyboard: Enter/Space
+ * opens, Escape closes, focus returns to the trigger.
  */
+const itemCls =
+  "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-text-secondary hover:bg-surface-subtle focus-visible:outline-none focus-visible:bg-surface-subtle";
+
 export function RowActionsMenu({
   row,
   onSetAdjust,
@@ -38,25 +45,29 @@ export function RowActionsMenu({
   }
 
   return (
-    <Can permission={STOCK_MUTATE_PERMISSION}>
-      <div ref={ref} className="relative inline-block text-left">
-        <button
-          ref={btnRef}
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label={`Actions for ${row.sku_code}`}
-          onClick={() => setOpen((v) => !v)}
-          className="grid h-11 w-11 place-items-center rounded-md text-gray-500 hover:bg-gray-100"
+    <div ref={ref} className="relative inline-block text-left">
+      <button
+        ref={btnRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Stock actions for ${row.sku_code}`}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "grid h-8 w-8 place-items-center rounded-md text-text-muted transition-colors hover:bg-surface-subtle",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
+          open && "bg-surface-subtle",
+        )}
+      >
+        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          onKeyDown={(e) => e.key === "Escape" && close()}
+          className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-border bg-surface p-1 shadow-lg"
         >
-          <span aria-hidden className="text-lg leading-none">⋯</span>
-        </button>
-        {open && (
-          <div
-            role="menu"
-            onKeyDown={(e) => e.key === "Escape" && close()}
-            className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
-          >
+          <Can permission={STOCK_MUTATE_PERMISSION}>
             <button
               role="menuitem"
               type="button"
@@ -64,8 +75,9 @@ export function RowActionsMenu({
                 setOpen(false);
                 onSetAdjust(row);
               }}
-              className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+              className={itemCls}
             >
+              <SlidersHorizontal className="h-4 w-4 text-text-muted" aria-hidden="true" />
               Set / adjust qty
             </button>
             <button
@@ -75,13 +87,23 @@ export function RowActionsMenu({
                 setOpen(false);
                 onEditThreshold(row);
               }}
-              className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+              className={itemCls}
             >
+              <Gauge className="h-4 w-4 text-text-muted" aria-hidden="true" />
               Edit threshold
             </button>
-          </div>
-        )}
-      </div>
-    </Can>
+          </Can>
+          <Link
+            role="menuitem"
+            href={`/admin/inventory/${row.variant_id}/movements`}
+            className={itemCls}
+            onClick={() => setOpen(false)}
+          >
+            <History className="h-4 w-4 text-text-muted" aria-hidden="true" />
+            View movements
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }

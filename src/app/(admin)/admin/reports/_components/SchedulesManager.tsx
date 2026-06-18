@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CalendarClock, Pencil, Plus, Trash2, User } from "lucide-react";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import {
   useDeleteSchedule,
@@ -8,22 +9,68 @@ import {
   useUpdateSchedule,
 } from "@/lib/api/hooks/reports";
 import type { Schedule } from "@/lib/api/schemas/reports";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  Badge,
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  SkeletonRows,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/stores/toast";
 import { getReportMeta, REPORTS_SCHEDULE_PERMISSION } from "./catalog";
 import { ScheduleForm } from "./ScheduleForm";
+import { ToggleSwitch } from "./ToggleSwitch";
 
 /**
- * Scheduled digests manager (FR-RPT-071) — list with cadence/recipients/active/
- * last-run, create/edit (drawer), activate/deactivate toggle, and delete.
- * Recipients skipped on the last run (suspended) are flagged. Gated on
- * `reports.report.schedule`.
+ * Scheduled digests manager (FR-RPT-071) — the MANAGE › Schedules view: report
+ * email digests with cadence, recipients, an active toggle, and last-run, plus a
+ * create/edit drawer. Re-skinned onto the AD0 `Table` to match prompt #10 + the
+ * Exports table chrome (no `.dc.html` was exported for Schedules). Gated on
+ * `reports.report.schedule`; data layer untouched (AD4 / admin-redesign README §2).
  */
+
+/** Overlapping recipient avatars + "+N" overflow. */
+function RecipientAvatars({ count }: { count: number }) {
+  if (count === 0) return <span className="text-text-faint">—</span>;
+  const shown = Math.min(count, 3);
+  return (
+    <span className="inline-flex items-center">
+      <span className="flex -space-x-2">
+        {Array.from({ length: shown }).map((_, i) => (
+          <span
+            key={i}
+            className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface bg-accent-100 text-accent-700"
+            aria-hidden="true"
+          >
+            <User className="h-3 w-3" />
+          </span>
+        ))}
+      </span>
+      {count > shown && (
+        <span className="ml-1.5 text-xs font-medium tabular-nums text-text-muted">
+          +{count - shown}
+        </span>
+      )}
+      <span className="sr-only">
+        {count} recipient{count === 1 ? "" : "s"}
+      </span>
+    </span>
+  );
+}
+
 export function SchedulesManager() {
   const { can, ready } = usePermissions();
   const enabled = ready && can(REPORTS_SCHEDULE_PERMISSION);
-  const { data, isLoading, isError } = useSchedules(enabled);
+  const { data, isLoading, isError, refetch } = useSchedules(enabled);
   const update = useUpdateSchedule();
   const del = useDeleteSchedule();
 
@@ -33,11 +80,13 @@ export function SchedulesManager() {
 
   if (ready && !can(REPORTS_SCHEDULE_PERMISSION)) {
     return (
-      <div className="py-12 text-center">
-        <p className="text-sm text-gray-600">
-          You don&apos;t have permission to manage report schedules.
-        </p>
-      </div>
+      <Card className="p-0">
+        <EmptyState
+          icon={CalendarClock}
+          title="No access to schedules"
+          description="You don’t have permission to manage report schedules."
+        />
+      </Card>
     );
   }
 
@@ -48,7 +97,7 @@ export function SchedulesManager() {
       await update.mutateAsync({ id: s.id, body: { is_active: !s.is_active } });
       toast(s.is_active ? "Schedule deactivated." : "Schedule activated.");
     } catch {
-      toast("Couldn't update the schedule.", "error");
+      toast("Couldn’t update the schedule.", "error");
     }
   }
 
@@ -59,123 +108,153 @@ export function SchedulesManager() {
       toast("Schedule deleted.");
       setToDelete(null);
     } catch {
-      toast("Couldn't delete the schedule.", "error");
+      toast("Couldn’t delete the schedule.", "error");
     }
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Report schedules</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Recurring email digests, delivered via notifications on the cadence.
+          <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">
+            Report schedules
+          </h1>
+          <p className="mt-1 max-w-2xl text-[13px] text-text-muted">
+            Digests are emailed to the selected admins on the cadence. Suspended
+            admins are skipped.
           </p>
         </div>
-        <button
-          type="button"
+        <Button
           onClick={() => setCreating(true)}
-          className="h-10 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700"
+          leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
         >
           New schedule
-        </button>
+        </Button>
       </div>
 
       {isLoading ? (
-        <div className="h-48 animate-pulse rounded-lg bg-gray-100" />
+        <Card className="p-0">
+          <SkeletonRows rows={4} cols={6} />
+        </Card>
       ) : isError ? (
-        <div className="py-12 text-center">
-          <p className="text-sm text-gray-600">Couldn&apos;t load the schedules.</p>
-        </div>
+        <Card className="p-0">
+          <ErrorState
+            description="Couldn’t load the schedules."
+            onRetry={() => refetch()}
+          />
+        </Card>
       ) : rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-12 text-center">
-          <p className="text-sm text-gray-500">No scheduled digests yet.</p>
-        </div>
+        <Card className="p-0">
+          <EmptyState
+            icon={CalendarClock}
+            title="No scheduled digests yet."
+            description="Create a schedule to email a report digest on a recurring cadence."
+            action={
+              <Button
+                onClick={() => setCreating(true)}
+                leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              >
+                New schedule
+              </Button>
+            }
+          />
+        </Card>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                <th scope="col" className="px-3 py-2 font-medium">Report</th>
-                <th scope="col" className="px-3 py-2 font-medium">Cadence</th>
-                <th scope="col" className="px-3 py-2 font-medium">Recipients</th>
-                <th scope="col" className="px-3 py-2 font-medium">Active</th>
-                <th scope="col" className="px-3 py-2 font-medium">Last run</th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="overflow-hidden p-0">
+          <Table className="min-w-[860px]">
+            <caption className="sr-only">Scheduled report digests</caption>
+            <THead>
+              <TR hover={false}>
+                <TH>Report</TH>
+                <TH>Params</TH>
+                <TH>Cadence</TH>
+                <TH>Recipients</TH>
+                <TH>Active</TH>
+                <TH>Last run</TH>
+                <TH className="text-right" />
+              </TR>
+            </THead>
+            <TBody>
               {rows.map((s) => {
                 const skipped = s.last_run_skipped_admin_ids?.length ?? 0;
                 return (
-                  <tr key={s.id} className="border-b border-gray-100 last:border-0">
-                    <td className="px-3 py-2 text-gray-900">
+                  <TR key={s.id}>
+                    <TD className="whitespace-nowrap font-semibold text-text">
                       {getReportMeta(s.report_key)?.label ?? s.report_key}
-                    </td>
-                    <td className="px-3 py-2 capitalize text-gray-700">{s.cadence}</td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {s.recipients_admin_ids.length}
-                      {skipped > 0 && (
-                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                          {skipped} skipped
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={
-                          "rounded-full px-2 py-0.5 text-xs font-medium " +
-                          (s.is_active
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-600")
-                        }
-                      >
-                        {s.is_active ? "Active" : "Paused"}
+                    </TD>
+                    <TD className="whitespace-nowrap tabular-nums text-text-faint">
+                      {formatScheduleParams(s.params)}
+                    </TD>
+                    <TD>
+                      <Badge tone="neutral" className="capitalize">
+                        {s.cadence}
+                      </Badge>
+                    </TD>
+                    <TD>
+                      <span className="inline-flex items-center gap-2">
+                        <RecipientAvatars count={s.recipients_admin_ids.length} />
+                        {skipped > 0 && (
+                          <Badge tone="warning" className="tabular-nums">
+                            {skipped} skipped
+                          </Badge>
+                        )}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-500">
+                    </TD>
+                    <TD>
+                      <ToggleSwitch
+                        checked={s.is_active}
+                        disabled={update.isPending}
+                        onChange={() => toggleActive(s)}
+                        label={
+                          s.is_active
+                            ? "Deactivate schedule"
+                            : "Activate schedule"
+                        }
+                      />
+                    </TD>
+                    <TD className="whitespace-nowrap tabular-nums text-text-muted">
                       {s.last_run_at ? formatDateTime(s.last_run_at) : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex justify-end gap-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleActive(s)}
-                          disabled={update.isPending}
-                          className="text-xs font-medium text-gray-600 hover:underline disabled:opacity-50"
-                        >
-                          {s.is_active ? "Deactivate" : "Activate"}
-                        </button>
-                        <button
-                          type="button"
+                    </TD>
+                    <TD className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="icon"
+                          size="sm"
+                          aria-label="Edit schedule"
                           onClick={() => setEditing(s)}
-                          className="text-xs font-medium text-brand-700 hover:underline"
                         >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          variant="icon"
+                          size="sm"
+                          aria-label="Delete schedule"
+                          className="text-error hover:bg-error-50"
                           onClick={() => setToDelete(s)}
-                          className="text-xs font-medium text-red-600 hover:underline"
                         >
-                          Delete
-                        </button>
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TD>
+                  </TR>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </TBody>
+          </Table>
+          <div className="border-t border-border px-5 py-3 text-xs tabular-nums text-text-muted">
+            {rows.length} schedule{rows.length === 1 ? "" : "s"}
+          </div>
+        </Card>
       )}
 
       {creating && <ScheduleForm onClose={() => setCreating(false)} />}
-      {editing && <ScheduleForm existing={editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <ScheduleForm existing={editing} onClose={() => setEditing(null)} />
+      )}
       <ConfirmDialog
         open={!!toDelete}
         title="Delete schedule"
-        message="This stops the recurring digest. This can't be undone."
+        message="This stops the recurring digest. This can’t be undone."
         confirmLabel="Delete"
         danger
         pending={del.isPending}
@@ -184,4 +263,18 @@ export function SchedulesManager() {
       />
     </div>
   );
+}
+
+/** Compact, defensive summary of a schedule's params (range · bucket). */
+function formatScheduleParams(params?: Record<string, unknown>): string {
+  if (!params) return "—";
+  const humanize = (v: unknown) =>
+    typeof v === "string"
+      ? v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      : null;
+  const parts = [
+    humanize(params.range ?? params.period),
+    humanize(params.bucket ?? params.view),
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "—";
 }

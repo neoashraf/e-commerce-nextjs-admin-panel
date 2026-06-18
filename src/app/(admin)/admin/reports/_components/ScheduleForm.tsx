@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, X } from "lucide-react";
 import { useAdminUsers } from "@/lib/api/hooks/useAdminUsers";
 import {
   useCreateSchedule,
@@ -13,17 +14,20 @@ import {
   type Schedule,
   type ScheduleCadence,
 } from "@/lib/api/schemas/reports";
+import { Button, Drawer, Select } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { toast } from "@/lib/stores/toast";
 import { getReportMeta } from "./catalog";
+import { ToggleSwitch } from "./ToggleSwitch";
 
 /**
- * Create / edit a scheduled report digest (FR-RPT-071) in a modal dialog.
- * Report + cadence + ≥1 active recipient required; the rolling params template
- * captures range + bucket. Suspended recipients are flagged (they're skipped at
- * send). Server-confirmed via POST/PATCH.
+ * Create / edit a scheduled report digest (FR-RPT-071/072) in the AD0 `Drawer`
+ * (right slide-over, focus-trapped, scrim, unsaved guard). Report + cadence + ≥1
+ * recipient required; the rolling params template captures range + bucket.
+ * Recipients are picked from the active admins; a selected recipient who is no
+ * longer active is flagged "will be skipped — suspended". Server-confirmed via
+ * POST/PATCH. Data layer untouched (AD4 / admin-redesign README §2).
  */
-const inp =
-  "h-10 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
 
 const RANGES = [
   { value: "last_7d", label: "Last 7 days" },
@@ -36,6 +40,23 @@ const BUCKETS = [
   { value: "month", label: "Monthly" },
 ];
 
+function Field({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block" htmlFor={htmlFor}>
+      <span className="mb-1.5 block text-sm font-medium text-text">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 export function ScheduleForm({
   existing,
   onClose,
@@ -46,50 +67,47 @@ export function ScheduleForm({
   const create = useCreateSchedule();
   const update = useUpdateSchedule();
   const { data: admins } = useAdminUsers({ status: "active" });
-  const titleId = useId();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const prevFocus = useRef<HTMLElement | null>(null);
 
-  const [reportKey, setReportKey] = useState<string>(existing?.report_key ?? "sales");
+  const [reportKey, setReportKey] = useState<string>(
+    existing?.report_key ?? "sales",
+  );
   const [range, setRange] = useState<string>(
     (existing?.params?.range as string) ?? "last_7d",
   );
   const [bucket, setBucket] = useState<string>(
     (existing?.params?.bucket as string) ?? "day",
   );
-  const [cadence, setCadence] = useState<ScheduleCadence>(existing?.cadence ?? "weekly");
+  const [cadence, setCadence] = useState<ScheduleCadence>(
+    existing?.cadence ?? "weekly",
+  );
   const [recipients, setRecipients] = useState<string[]>(
     existing?.recipients_admin_ids ?? [],
   );
   const [isActive, setIsActive] = useState<boolean>(existing?.is_active ?? true);
   const [submitted, setSubmitted] = useState(false);
-
-  useEffect(() => {
-    prevFocus.current = document.activeElement as HTMLElement | null;
-    const raf = requestAnimationFrame(() =>
-      panelRef.current?.querySelector<HTMLElement>("select,input,button")?.focus(),
-    );
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      cancelAnimationFrame(raf);
-      document.removeEventListener("keydown", onKey);
-      prevFocus.current?.focus?.();
-    };
-  }, [onClose]);
+  const [dirty, setDirty] = useState(false);
 
   const activeAdmins = useMemo(() => admins ?? [], [admins]);
+  const adminsLoaded = admins !== undefined;
   const recipientsError =
     submitted && recipients.length === 0 ? "Add at least one recipient." : null;
-
   const pending = create.isPending || update.isPending;
 
+  function markDirty() {
+    if (!dirty) setDirty(true);
+  }
+
   function toggleRecipient(id: string) {
+    markDirty();
     setRecipients((cur) =>
       cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
     );
+  }
+
+  function handleClose() {
+    if (pending) return;
+    if (dirty && !window.confirm("Discard unsaved changes?")) return;
+    onClose();
   }
 
   async function onSave() {
@@ -112,126 +130,192 @@ export function ScheduleForm({
       }
       onClose();
     } catch {
-      toast("Couldn't save the schedule. Try again.", "error");
+      toast("Couldn’t save the schedule. Try again.", "error");
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="relative w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
-      >
-        <h2 id={titleId} className="text-base font-semibold text-gray-900">
-          {existing ? "Edit schedule" : "New schedule"}
-        </h2>
-        <p className="mt-1 text-xs text-gray-500">
-          Digests are emailed to the selected admins on the cadence. Suspended admins are skipped.
-        </p>
+    <Drawer
+      open
+      onClose={handleClose}
+      title={existing ? "Edit schedule" : "New schedule"}
+      subtitle="Digests are emailed to the selected admins on the cadence. Suspended admins are skipped."
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={handleClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button onClick={onSave} loading={pending} disabled={pending}>
+            Save
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+        <Field label="Report">
+          <Select
+            value={reportKey}
+            onChange={(e) => {
+              markDirty();
+              setReportKey(e.target.value);
+            }}
+          >
+            {REPORT_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {getReportMeta(k)?.label ?? k}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
-        <div className="mt-4 space-y-4">
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-900">Report</span>
-            <select className={inp} value={reportKey} onChange={(e) => setReportKey(e.target.value)}>
-              {REPORT_KEYS.map((k) => (
-                <option key={k} value={k}>
-                  {getReportMeta(k)?.label ?? k}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Range">
+            <Select
+              value={range}
+              onChange={(e) => {
+                markDirty();
+                setRange(e.target.value);
+              }}
+            >
+              {RANGES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
                 </option>
               ))}
-            </select>
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-gray-900">Range</span>
-              <select className={inp} value={range} onChange={(e) => setRange(e.target.value)}>
-                {RANGES.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-gray-900">Bucket</span>
-              <select className={inp} value={bucket} onChange={(e) => setBucket(e.target.value)}>
-                {BUCKETS.map((b) => (
-                  <option key={b.value} value={b.value}>{b.label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-900">Cadence</span>
-            <select
-              className={inp}
-              value={cadence}
-              onChange={(e) => setCadence(e.target.value as ScheduleCadence)}
+            </Select>
+          </Field>
+          <Field label="Bucket">
+            <Select
+              value={bucket}
+              onChange={(e) => {
+                markDirty();
+                setBucket(e.target.value);
+              }}
             >
-              {SCHEDULE_CADENCES.map((c) => (
-                <option key={c} value={c} className="capitalize">{c}</option>
+              {BUCKETS.map((b) => (
+                <option key={b.value} value={b.value}>
+                  {b.label}
+                </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </Field>
+        </div>
 
-          <fieldset>
-            <legend className="mb-1 block text-sm font-medium text-gray-900">Recipients</legend>
-            <div
-              className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-gray-300 p-2"
-              aria-describedby={recipientsError ? "recipients-err" : undefined}
-            >
-              {activeAdmins.length === 0 ? (
-                <p className="p-1 text-xs text-gray-400">No active admins available.</p>
-              ) : (
-                activeAdmins.map((a) => (
-                  <label key={a.id} className="flex items-center gap-2 text-sm">
+        <Field label="Cadence">
+          <Select
+            value={cadence}
+            onChange={(e) => {
+              markDirty();
+              setCadence(e.target.value as ScheduleCadence);
+            }}
+          >
+            {SCHEDULE_CADENCES.map((c) => (
+              <option key={c} value={c} className="capitalize">
+                {c.charAt(0).toUpperCase() + c.slice(1)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <fieldset>
+          <legend className="mb-1.5 block text-sm font-medium text-text">
+            Recipients
+          </legend>
+
+          {recipients.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {recipients.map((id) => {
+                const admin = activeAdmins.find((a) => a.id === id);
+                const suspended = adminsLoaded && !admin;
+                return (
+                  <span
+                    key={id}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium",
+                      suspended
+                        ? "bg-warning-50 text-warning"
+                        : "bg-accent-50 text-accent-700",
+                    )}
+                  >
+                    {suspended && (
+                      <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                    )}
+                    {suspended
+                      ? "Suspended — will be skipped"
+                      : (admin?.full_name ?? "…")}
+                    <button
+                      type="button"
+                      onClick={() => toggleRecipient(id)}
+                      aria-label={`Remove ${admin?.full_name ?? "recipient"}`}
+                      className="-mr-0.5 ml-0.5 rounded-sm hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+                    >
+                      <X className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          <div
+            className="max-h-44 space-y-0.5 overflow-y-auto rounded-md border border-border-strong p-1.5"
+            aria-describedby={recipientsError ? "recipients-err" : undefined}
+          >
+            {activeAdmins.length === 0 ? (
+              <p className="p-1.5 text-xs text-text-faint">
+                No active admins available.
+              </p>
+            ) : (
+              activeAdmins.map((a) => {
+                const checked = recipients.includes(a.id);
+                return (
+                  <label
+                    key={a.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-surface-hover"
+                  >
                     <input
                       type="checkbox"
-                      checked={recipients.includes(a.id)}
+                      checked={checked}
                       onChange={() => toggleRecipient(a.id)}
+                      className="h-4 w-4 rounded border-border-strong text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
                     />
-                    <span className="text-gray-700">{a.full_name}</span>
-                    <span className="text-xs text-gray-400">{a.email}</span>
+                    <span className="text-text">{a.full_name}</span>
+                    <span className="truncate text-xs text-text-faint">
+                      {a.email}
+                    </span>
                   </label>
-                ))
-              )}
-            </div>
-            {recipientsError && (
-              <span id="recipients-err" role="alert" className="mt-1 block text-xs text-red-600">
-                {recipientsError}
-              </span>
+                );
+              })
             )}
-          </fieldset>
+          </div>
+          {recipientsError && (
+            <span
+              id="recipients-err"
+              role="alert"
+              className="mt-1.5 block text-xs text-error"
+            >
+              {recipientsError}
+            </span>
+          )}
+        </fieldset>
 
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-            Active (run on the cadence)
-          </label>
-        </div>
-
-        <div className="mt-5 flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={pending}
-            aria-busy={pending}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-          >
-            {pending ? "Saving…" : "Save"}
-          </button>
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+          <div>
+            <span className="block text-sm font-medium text-text">Active</span>
+            <span className="text-xs text-text-muted">
+              Run this digest on the cadence.
+            </span>
+          </div>
+          <ToggleSwitch
+            checked={isActive}
+            onChange={() => {
+              markDirty();
+              setIsActive((v) => !v);
+            }}
+            label="Active"
+          />
         </div>
       </div>
-    </div>
+    </Drawer>
   );
 }

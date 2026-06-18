@@ -204,19 +204,27 @@ export type ExportStatusResult = z.infer<typeof exportStatusResultSchema>;
 
 /**
  * `GET /admin/reports/exports` — the export manager list (rpt-export-list-be, EB2).
- * The endpoint is additive and not yet shipped on the BE; the manager degrades
- * gracefully (empty list) until it lands.
+ * Per the contract (api-contracts/15-reports.md) each list row is keyed `id`,
+ * whereas the `POST …/export` 202 accept response uses `export_id`. We read the
+ * list's `id` (tolerating `export_id` for forward-compat) and normalise to a
+ * single `export_id` field so the manager has one stable key.
  */
-export const exportRowSchema = z.object({
-  export_id: z.string(),
-  report_key: z.string(),
-  format: exportStatusSchema.or(z.enum(EXPORT_FORMATS)).or(z.string()),
-  status: exportStatusSchema,
-  file_url: z.string().nullable().optional(),
-  created_at: z.string().optional(),
-  expires_at: z.string().nullable().optional(),
-  params: z.record(z.unknown()).optional(),
-});
+export const exportRowSchema = z
+  .object({
+    id: z.string().optional(),
+    export_id: z.string().optional(),
+    report_key: z.string(),
+    format: z.enum(EXPORT_FORMATS).or(z.string()),
+    status: exportStatusSchema,
+    file_url: z.string().nullable().optional(),
+    created_at: z.string().optional(),
+    expires_at: z.string().nullable().optional(),
+    params: z.record(z.unknown()).optional(),
+  })
+  .transform(({ id, export_id, ...rest }) => ({
+    export_id: export_id ?? id ?? "",
+    ...rest,
+  }));
 export type ExportRow = z.infer<typeof exportRowSchema>;
 export const exportListSchema = z.array(exportRowSchema);
 

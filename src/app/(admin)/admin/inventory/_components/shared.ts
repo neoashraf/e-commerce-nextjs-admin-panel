@@ -6,11 +6,22 @@ import type { StockRow, StockStatus } from "@/lib/api/schemas/inventory";
  * `inventory.stock.read`. (design §11/§14 open question, resolved against BE.) */
 export const STOCK_MUTATE_PERMISSION = "inventory.stock.update";
 
-/** Status badge styling — label + color (never color alone, a11y §10). */
-export const STATUS_BADGE: Record<StockStatus, { cls: string; label: string }> = {
-  in_stock: { cls: "bg-green-50 text-green-700 ring-1 ring-green-600/20", label: "In stock" },
-  low_stock: { cls: "bg-amber-50 text-amber-700 ring-1 ring-amber-600/20", label: "Low" },
-  out_of_stock: { cls: "bg-red-50 text-red-700 ring-1 ring-red-600/20", label: "Out" },
+/**
+ * Status → label + semantic tone (design-system §8.7; never color alone).
+ * Fed to the AD0 `StatusPill` (`status` normalises `in_stock`→`in-stock` etc.);
+ * `label` overrides the humanised text to the short directory labels.
+ */
+export const STATUS_LABEL: Record<StockStatus, string> = {
+  in_stock: "In stock",
+  low_stock: "Low",
+  out_of_stock: "Out",
+};
+
+/** Filter-chip dot color per status (design Stock toolbar). */
+export const STATUS_DOT: Record<StockStatus, string> = {
+  in_stock: "bg-success",
+  low_stock: "bg-warning",
+  out_of_stock: "bg-error",
 };
 
 /** Render the options map as "Color: Black · Size: 43"; "" when none/missing. */

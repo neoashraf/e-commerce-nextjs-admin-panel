@@ -4,7 +4,9 @@ import { z } from "zod";
 const kpiSchema = z.object({
   value: z.union([z.string(), z.number()]),
   currency: z.string().optional(),
-  delta_pct: z.number().optional(),
+  // BE sends `null` (not omitted) when the prior period is empty — show "—". `.nullish`
+  // accepts null | undefined so a no-basis delta doesn't fail the whole envelope.
+  delta_pct: z.number().nullish(),
   direction: z.enum(["up", "down", "flat"]).optional(),
 });
 
@@ -26,8 +28,11 @@ export const dashboardSchema = z.object({
       compare_to: z.string().optional(),
     })
     .optional(),
-  kpis: z.record(kpiSchema).optional(),
-  alerts: z.record(z.number()).optional(),
+  // Each top-level widget is either omitted (admin lacks the permission, FR-DASH-030)
+  // OR `null` (its source failed to compute — §12.7 resilience degrades only that widget).
+  // `.nullish` accepts both; the view already null-guards each widget before rendering.
+  kpis: z.record(kpiSchema).nullish(),
+  alerts: z.record(z.number()).nullish(),
   breakdowns: z
     .object({
       trend: z.array(trendPointSchema).optional(),
@@ -44,7 +49,7 @@ export const dashboardSchema = z.object({
         )
         .optional(),
     })
-    .optional(),
+    .nullish(),
   as_of: z.string().optional(),
 });
 export type Dashboard = z.infer<typeof dashboardSchema>;

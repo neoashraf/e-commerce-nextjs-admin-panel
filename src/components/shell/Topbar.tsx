@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Menu, Search } from "lucide-react";
+import { ChevronDown, Menu, PanelLeft, Search } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useAdminLogout } from "@/lib/api/hooks/useAuth";
 import { NotificationBell } from "@/components/shell/NotificationBell";
@@ -17,7 +17,15 @@ import { NotificationBell } from "@/components/shell/NotificationBell";
  *
  * Keyboard-accessible menu: Esc + outside-click close, focus returns to trigger.
  */
-export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
+export function Topbar({
+  onMenuClick,
+  onToggleCollapse,
+  collapsed = false,
+}: {
+  onMenuClick: () => void;
+  onToggleCollapse?: () => void;
+  collapsed?: boolean;
+}) {
   const router = useRouter();
   const admin = useAuthStore((s) => s.admin);
   const logout = useAdminLogout();
@@ -67,6 +75,19 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
         <Menu className="h-5 w-5" aria-hidden="true" />
       </button>
 
+      {/* Desktop sidebar collapse toggle (design-system §7.2) — bordered square
+          that shrinks the rail to an icon strip. Hidden on mobile, where the
+          drawer toggle above takes over. */}
+      <button
+        type="button"
+        onClick={onToggleCollapse}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-pressed={collapsed}
+        className="hidden h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-secondary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 md:inline-flex"
+      >
+        <PanelLeft className="h-[18px] w-[18px]" aria-hidden="true" />
+      </button>
+
       {/* Global search (visual affordance; backend search is out of scope here). */}
       <div className="relative hidden max-w-md flex-1 sm:block">
         <Search
@@ -84,8 +105,11 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
         </kbd>
       </div>
 
-      <div className="flex flex-1 items-center justify-end gap-1 sm:flex-none">
+      <div className="flex flex-1 items-center justify-end gap-2.5 sm:flex-none">
         <NotificationBell />
+
+        {/* Hairline divider between the bell and the account menu (§7.2). */}
+        <span className="hidden h-6 w-px bg-border sm:block" aria-hidden="true" />
 
         <div className="relative">
           <button

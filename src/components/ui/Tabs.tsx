@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
@@ -12,6 +13,8 @@ export interface TabItem {
   label: string;
   href?: string;
   count?: number;
+  /** Optional leading icon (e.g. report-type glyphs in the Reports sub-nav). */
+  icon?: LucideIcon;
 }
 
 function TabLink({
@@ -23,8 +26,18 @@ function TabLink({
   active: boolean;
   onSelect?: (key: string) => void;
 }) {
+  const Icon = item.icon;
   const inner = (
     <>
+      {Icon && (
+        <Icon
+          className={cn(
+            "h-4 w-4 shrink-0",
+            active ? "text-accent-600" : "text-text-faint",
+          )}
+          aria-hidden="true"
+        />
+      )}
       {item.label}
       {item.count !== undefined && (
         <span className="ml-1.5 tabular-nums text-text-faint">{item.count}</span>
@@ -32,7 +45,7 @@ function TabLink({
     </>
   );
   const className = cn(
-    "relative -mb-px inline-flex items-center whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors",
+    "relative -mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
     active
       ? "border-accent-600 text-text"

@@ -27,6 +27,7 @@ export function ReportTabs() {
     key: r.key,
     label: r.label,
     href: `/admin/reports/${r.key}`,
+    icon: r.icon,
   }));
 
   const secondary: TabItem[] = [];

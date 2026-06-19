@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useInviteAdmin, useEditAdmin, useRoles } from "@/lib/api/hooks/useAdminUsers";
 import { useAuthStore } from "@/lib/stores/auth";
+import { toast } from "@/lib/stores/toast";
 import { ApiError } from "@/lib/api/errors";
 
 /**
@@ -31,7 +32,6 @@ export function InviteEditForm({
   const [roleId, setRoleId] = useState(initial?.role_id ?? "");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
 
   const isSelf = mode === "edit" && initial?.id === meId;
   const selectedRole = roles?.find((r) => r.id === roleId);
@@ -43,8 +43,10 @@ export function InviteEditForm({
     setFormError(null);
     try {
       if (mode === "create") {
-        await invite.mutateAsync({ full_name: fullName.trim(), email: email.trim(), phone: phone.trim() || undefined, role_id: roleId });
-        setDone(`Invite sent to ${email.trim()}`);
+        const created = await invite.mutateAsync({ full_name: fullName.trim(), email: email.trim(), phone: phone.trim() || undefined, role_id: roleId });
+        toast(`Invite sent to ${email.trim()}`);
+        // Land on the new admin's edit page so it can be reviewed/edited right away.
+        router.push(`/admin/users/${created.id}/edit`);
       } else {
         await edit.mutateAsync({ full_name: fullName.trim(), phone: phone.trim() || undefined, role_id: isSelf ? undefined : roleId });
         router.push("/admin/users");
@@ -60,17 +62,6 @@ export function InviteEditForm({
         setFormError("Something went wrong. Please try again.");
       }
     }
-  }
-
-  if (done) {
-    return (
-      <div className="mx-auto max-w-md rounded-lg border border-green-200 bg-green-50 p-6 text-center">
-        <p className="text-sm font-medium text-green-800">{done}</p>
-        <button type="button" onClick={() => router.push("/admin/users")} className="mt-3 text-sm font-medium text-brand-700 hover:underline">
-          Back to admin users
-        </button>
-      </div>
-    );
   }
 
   const pending = invite.isPending || edit.isPending;

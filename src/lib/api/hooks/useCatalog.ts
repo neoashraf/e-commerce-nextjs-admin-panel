@@ -12,8 +12,8 @@ import {
   familyListSchema,
   familyDetailSchema,
   createFamilyResultSchema,
-  productListSchema,
-  type ProductRow,
+  productPageSchema,
+  type ProductPage,
   type CategoryNode,
   type CategoryDetail,
   type AttributeRow,
@@ -246,8 +246,9 @@ export function useProducts(params: Record<string, string | number | boolean | u
   const qs = JSON.stringify(params);
   return useQuery({
     queryKey: ["admin-products", qs] as const,
-    queryFn: (): Promise<ProductRow[]> =>
-      api.get("/admin/products", { schema: productListSchema, params }) as Promise<ProductRow[]>,
+    // rawEnvelope so the list view can read meta.total for pagination.
+    queryFn: (): Promise<ProductPage> =>
+      api.get("/admin/products", { schema: productPageSchema, params, rawEnvelope: true }) as Promise<ProductPage>,
     staleTime: 20_000,
   });
 }

@@ -61,11 +61,11 @@ export function ReplacementPicker({
             <div className="h-16 animate-pulse bg-gray-50" />
           ) : products.isError ? (
             <p className="p-3 text-sm text-gray-500">Couldn&apos;t search products.</p>
-          ) : !products.data || products.data.length === 0 ? (
+          ) : !products.data?.data.length ? (
             <p className="p-3 text-sm text-gray-500">No products match &ldquo;{term}&rdquo;.</p>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {products.data.map((p) => (
+              {products.data.data.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"

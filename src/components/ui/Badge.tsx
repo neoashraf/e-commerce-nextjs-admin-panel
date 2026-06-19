@@ -50,6 +50,10 @@ const STATUS_MAP: Record<string, { tone: BadgeTone; dot: string }> = {
   active: { tone: "success", dot: "#16A34A" },
   "in-stock": { tone: "success", dot: "#16A34A" },
   cancelled: { tone: "neutral", dot: "#64748B" },
+  // Catalog product lifecycle (CAT).
+  draft: { tone: "neutral", dot: "#64748B" },
+  published: { tone: "success", dot: "#16A34A" },
+  archived: { tone: "warning", dot: "#D97706" },
   refunded: { tone: "neutral", dot: "#8B5CF6" },
   failed: { tone: "error", dot: "#DC2626" },
   "out-of-stock": { tone: "error", dot: "#DC2626" },

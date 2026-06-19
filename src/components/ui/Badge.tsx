@@ -58,6 +58,12 @@ const STATUS_MAP: Record<string, { tone: BadgeTone; dot: string }> = {
   failed: { tone: "error", dot: "#DC2626" },
   "out-of-stock": { tone: "error", dot: "#DC2626" },
   "low-stock": { tone: "warning", dot: "#D97706" },
+  // Lead inbox statuses (LEAD).
+  new: { tone: "info", dot: "#06B6D4" },
+  open: { tone: "success", dot: "#16A34A" },
+  "awaiting-customer": { tone: "warning", dot: "#D97706" },
+  resolved: { tone: "neutral", dot: "#64748B" },
+  closed: { tone: "neutral", dot: "#64748B" },
 };
 
 function humanize(status: string): string {

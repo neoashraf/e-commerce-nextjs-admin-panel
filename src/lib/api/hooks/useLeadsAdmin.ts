@@ -102,3 +102,31 @@ export function useAssignLead(reference: string) {
     },
   });
 }
+
+/** Claim → exchange/cancel handoff to ORD (FR-LEAD-016, exchange-only per BR-LEAD-3). */
+export const handoffResultSchema = z.object({
+  order_reference: z.string(),
+  handoff: z.string(),
+  exchange_id: z.string().nullable().optional(),
+  linked: z.boolean(),
+});
+export type HandoffResult = z.infer<typeof handoffResultSchema>;
+
+export interface HandoffExchangeBody {
+  order_reference: string;
+  order_item_id: string;
+  action: "exchange" | "cancel";
+  reason: string;
+}
+
+/** POST /admin/leads/{reference}/handoff-exchange (leads.lead.respond + orders.exchange.review). */
+export function useHandoffExchange(reference: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: HandoffExchangeBody) =>
+      api.post(`/admin/leads/${reference}/handoff-exchange`, body as unknown as Record<string, unknown>, {
+        schema: handoffResultSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-lead", reference] }),
+  });
+}

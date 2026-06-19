@@ -6,15 +6,37 @@ import { useTemplates, useCreateTemplate, useUpdateTemplate, type TemplateRow } 
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Input,
+  Select,
+  SkeletonRows,
+  StatusPill,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from "@/components/ui";
 
 /**
- * Notification templates (notif-templates-fe). List by event/channel/locale +
- * inline body editor (PATCH creates a new version). Create a new template
- * (event/channel/locale/body); 409 active-exists + 400 bad-placeholder guards.
- * NO_BANGLA_TEMPLATE (422) handled on promotional events.
+ * Notification templates (notif-templates-fe) on the AD6 Data Table primitive
+ * (design-system §8.6): Card-wrapped table (event/channel/locale/version/status)
+ * with an inline body editor that expands as a full-width row beneath the
+ * template (PATCH creates a new version). No pagination — the templates endpoint
+ * returns a small bounded set with no page/limit/total. Create a new template
+ * (event/channel/locale/body); 409 active-exists + 400 bad-placeholder +
+ * NO_BANGLA_TEMPLATE (422) guards.
  */
+const TEXTAREA = "w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1";
+
 export function TemplatesView() {
-  const { data, isLoading, isError, refetch } = useTemplates({ page: 1, limit: 100 });
+  const { data, isLoading, isError, refetch } = useTemplates({});
   const create = useCreateTemplate();
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ event_type: "", channel: "sms", locale: "en", body: "" });
@@ -34,36 +56,61 @@ export function TemplatesView() {
     }
   }
 
-  const inp = "h-9 rounded-md border border-gray-300 px-2 text-sm";
-
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Notification templates</h1>
-        <div className="flex items-center gap-3">
-          <Can permission="notifications.campaign.send"><Link href="/admin/notifications/campaigns/new" className="text-sm font-medium text-brand-700 hover:underline">New campaign</Link></Can>
-          <Can permission="notifications.template.create"><button type="button" onClick={() => setAdding((a) => !a)} className="text-sm font-medium text-brand-700 hover:underline">+ New template</button></Can>
+        <h1 className="text-[22px] font-bold leading-7 text-text">Notification templates</h1>
+        <div className="flex items-center gap-4">
+          <Can permission="notifications.campaign.send"><Link href="/admin/notifications/campaigns/new" className="text-sm font-medium text-accent-700 hover:underline">New campaign</Link></Can>
+          <Can permission="notifications.template.create"><Button variant="primary" onClick={() => setAdding((a) => !a)}>{adding ? "Close" : "New template"}</Button></Can>
         </div>
       </div>
 
-      {error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="rounded-md bg-error-50 px-3 py-2 text-sm text-error">{error}</p>}
 
       {adding && (
-        <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-4">
+        <Card className="space-y-2 p-4">
           <div className="flex flex-wrap gap-2">
-            <input className={inp + " flex-1"} placeholder="event_type (e.g. order.shipped)" value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value })} />
-            <select className={inp} value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })}><option value="sms">SMS</option><option value="email">Email</option></select>
-            <select className={inp} value={form.locale} onChange={(e) => setForm({ ...form, locale: e.target.value })}><option value="en">en</option><option value="bn">bn</option></select>
+            <div className="min-w-[16rem] flex-1">
+              <Input placeholder="event_type (e.g. order.shipped)" aria-label="Event type" value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value })} />
+            </div>
+            <div className="w-32">
+              <Select aria-label="Channel" value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })}><option value="sms">SMS</option><option value="email">Email</option></Select>
+            </div>
+            <div className="w-28">
+              <Select aria-label="Locale" value={form.locale} onChange={(e) => setForm({ ...form, locale: e.target.value })}><option value="en">en</option><option value="bn">bn</option></Select>
+            </div>
           </div>
-          <textarea className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" rows={3} placeholder="Body with {{placeholders}}" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
-          <button type="button" onClick={add} disabled={create.isPending} className="inline-flex h-9 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">Create</button>
-        </div>
+          <textarea className={TEXTAREA} rows={3} placeholder="Body with {{placeholders}}" aria-label="Template body" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
+          <Button variant="primary" onClick={add} loading={create.isPending}>Create</Button>
+        </Card>
       )}
 
-      {isLoading ? <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
-        : isError ? <div className="py-12 text-center"><p className="text-sm text-gray-600">Couldn&apos;t load templates.</p><button type="button" onClick={() => refetch()} className="mt-2 text-sm font-medium text-brand-700 hover:underline">Try again</button></div>
-        : !data || data.length === 0 ? <p className="py-12 text-center text-sm text-gray-500">No templates yet.</p>
-        : <ul className="space-y-2">{data.map((t) => <TemplateRowItem key={t.id} template={t} />)}</ul>}
+      <Card>
+        {isLoading ? (
+          <SkeletonRows rows={8} cols={6} />
+        ) : isError ? (
+          <ErrorState description="Couldn't load templates." onRetry={() => refetch()} />
+        ) : !data || data.length === 0 ? (
+          <EmptyState title="No templates yet." description="Create your first notification template." />
+        ) : (
+          <Table>
+            <THead>
+              <TR hover={false}>
+                <TH>Event</TH>
+                <TH>Channel</TH>
+                <TH>Locale</TH>
+                <TH>Version</TH>
+                <TH>Status</TH>
+                <TH className="text-right"><span className="sr-only">Actions</span></TH>
+              </TR>
+            </THead>
+            <TBody>
+              {data.map((t) => <TemplateRowItem key={t.id} template={t} />)}
+            </TBody>
+          </Table>
+        )}
+      </Card>
     </div>
   );
 }
@@ -74,17 +121,29 @@ function TemplateRowItem({ template }: { template: TemplateRow }) {
   const [body, setBody] = useState(template.body ?? "");
 
   return (
-    <li className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-900">{template.event_type}<span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{template.channel} · {template.locale}{template.version ? ` · v${template.version}` : ""}</span></span>
-        <Can permission="notifications.template.update"><button type="button" onClick={() => setEditing((e) => !e)} className="text-sm font-medium text-brand-700 hover:underline">{editing ? "Close" : "Edit"}</button></Can>
-      </div>
-      {editing ? (
-        <div className="mt-2 space-y-2">
-          <textarea className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" rows={3} value={body} onChange={(e) => setBody(e.target.value)} />
-          <button type="button" onClick={() => update.mutate({ body }, { onSuccess: () => { setEditing(false); toast("Template updated (new version)."); } })} disabled={update.isPending} className="inline-flex h-9 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">Save new version</button>
-        </div>
-      ) : template.body ? <p className="mt-1 whitespace-pre-line break-words text-sm text-gray-600">{template.body}</p> : null}
-    </li>
+    <>
+      <TR hover={!editing}>
+        <TD className="font-medium text-text">{template.event_type}</TD>
+        <TD><Badge tone="neutral">{template.channel}</Badge></TD>
+        <TD>{template.locale ?? "—"}</TD>
+        <TD>{template.version ? `v${template.version}` : "—"}</TD>
+        <TD><StatusPill status={template.is_active ? "active" : "inactive"} /></TD>
+        <TD className="text-right">
+          <Can permission="notifications.template.update">
+            <button type="button" onClick={() => setEditing((e) => !e)} className="text-sm font-medium text-accent-700 hover:underline">{editing ? "Close" : "Edit"}</button>
+          </Can>
+        </TD>
+      </TR>
+      {editing && (
+        <TR hover={false}>
+          <TD colSpan={6} className="bg-surface-subtle">
+            <div className="space-y-2">
+              <textarea className={TEXTAREA} rows={3} aria-label={`Body for ${template.event_type}`} value={body} onChange={(e) => setBody(e.target.value)} />
+              <Button variant="primary" loading={update.isPending} onClick={() => update.mutate({ body }, { onSuccess: () => { setEditing(false); toast("Template updated (new version)."); } })}>Save new version</Button>
+            </div>
+          </TD>
+        </TR>
+      )}
+    </>
   );
 }

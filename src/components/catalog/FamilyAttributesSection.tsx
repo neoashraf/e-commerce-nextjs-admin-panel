@@ -43,7 +43,7 @@ export function FamilyAttributesSection({
   if (isLoading) return <div className="h-24 animate-pulse rounded-lg bg-gray-100" />;
   if (!family) return null;
 
-  const byCode = new Map<string, AttributeRow>((attrList ?? []).map((a) => [a.code, a]));
+  const byCode = new Map<string, AttributeRow>((attrList?.data ?? []).map((a) => [a.code, a]));
 
   // Flatten the family's groups into the custom (non-handled) attributes.
   const custom: FamilyAttribute[] = family.groups

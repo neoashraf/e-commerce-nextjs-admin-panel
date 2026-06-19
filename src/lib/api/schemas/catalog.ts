@@ -84,6 +84,9 @@ export const attributeRowSchema = z.object({
 });
 export type AttributeRow = z.infer<typeof attributeRowSchema>;
 export const attributeListSchema = z.array(attributeRowSchema);
+/** Paginated envelope for GET /admin/attributes (rawEnvelope: { data, meta }). */
+export const attributePageSchema = paginated(attributeListSchema);
+export type AttributePage = z.infer<typeof attributePageSchema>;
 
 export const attributeOptionSchema = z.object({
   id: z.string().optional(),

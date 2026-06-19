@@ -15,6 +15,10 @@ import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/stores/toast";
+import { LeadClaimHandoff } from "@/components/leads/LeadClaimHandoff";
+
+/** Lead types eligible for a claim → Orders exchange handoff (FR-LEAD-016). */
+const HANDOFF_TYPES = ["claim_return", "order_issue"];
 
 const STATUS_OPTIONS = ["open", "awaiting_customer", "resolved", "closed", "spam"] as const;
 
@@ -28,6 +32,7 @@ export function LeadThreadView({ reference }: { reference: string }) {
   const note = useAddInternalNote(reference);
   const [replyBody, setReplyBody] = useState("");
   const [noteBody, setNoteBody] = useState("");
+  const [showHandoff, setShowHandoff] = useState(false);
 
   if (isLoading) return <div className="h-64 animate-pulse rounded-lg bg-gray-100" />;
   if (isError || !data) {
@@ -50,7 +55,26 @@ export function LeadThreadView({ reference }: { reference: string }) {
         <Can permission="leads.lead.assign">
           <AssigneePicker reference={reference} current={data.assigned_admin_id ?? null} />
         </Can>
+        {HANDOFF_TYPES.includes(data.type) && (
+          <Can allOf={["leads.lead.respond", "orders.exchange.review"]}>
+            <button
+              type="button"
+              onClick={() => setShowHandoff(true)}
+              className="ml-auto h-9 rounded-md border border-brand-600 px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+            >
+              Process exchange in Orders
+            </button>
+          </Can>
+        )}
       </div>
+
+      {showHandoff && (
+        <LeadClaimHandoff
+          reference={reference}
+          defaultOrderRef={data.order_reference ?? data.links?.order_reference ?? null}
+          onClose={() => setShowHandoff(false)}
+        />
+      )}
 
       <ul className="space-y-3">
         {data.messages.map((m, i) => (

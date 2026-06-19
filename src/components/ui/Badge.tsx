@@ -64,6 +64,9 @@ const STATUS_MAP: Record<string, { tone: BadgeTone; dot: string }> = {
   "awaiting-customer": { tone: "warning", dot: "#D97706" },
   resolved: { tone: "neutral", dot: "#64748B" },
   closed: { tone: "neutral", dot: "#64748B" },
+  // Admin-user lifecycle (RBAC).
+  suspended: { tone: "warning", dot: "#D97706" },
+  deleted: { tone: "neutral", dot: "#64748B" },
 };
 
 function humanize(status: string): string {

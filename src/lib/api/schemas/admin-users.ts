@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginated } from "@/lib/api/schemas/pagination";
 
 /**
  * Zod schemas for admin-user management + roles list
@@ -20,6 +21,9 @@ export const adminUserRowSchema = z.object({
 export type AdminUserRow = z.infer<typeof adminUserRowSchema>;
 
 export const adminUserListSchema = z.array(adminUserRowSchema);
+/** Paginated envelope for GET /admin/users (rawEnvelope: { data, meta }). */
+export const adminUserPageSchema = paginated(adminUserListSchema);
+export type AdminUserPage = z.infer<typeof adminUserPageSchema>;
 
 export const inviteResultSchema = z.object({
   id: z.string(),

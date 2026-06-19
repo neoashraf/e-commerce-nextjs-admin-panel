@@ -161,7 +161,7 @@ function AssigneeSelect({ reference, current }: { reference: string; current: st
         className="h-9 rounded-md border border-gray-300 px-2 text-sm"
       >
         <option value="">Unassigned</option>
-        {admins?.map((a) => (
+        {admins?.data.map((a) => (
           <option key={a.id} value={a.id}>{a.full_name}</option>
         ))}
       </select>

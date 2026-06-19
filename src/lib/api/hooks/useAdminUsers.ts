@@ -3,10 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import {
-  adminUserListSchema,
+  adminUserPageSchema,
   inviteResultSchema,
   roleListSchema,
-  type AdminUserRow,
+  type AdminUserPage,
   type RoleOption,
 } from "@/lib/api/schemas/admin-users";
 
@@ -23,8 +23,10 @@ export function useAdminUsers(params: Record<string, string | number | boolean |
   const qs = JSON.stringify(params);
   return useQuery({
     queryKey: adminUserKeys.list(qs),
-    queryFn: (): Promise<AdminUserRow[]> =>
-      api.get("/admin/users", { schema: adminUserListSchema, params }) as Promise<AdminUserRow[]>,
+    // rawEnvelope so the list view can read meta.total for pagination. Bulk
+    // consumers (recipient/assignee pickers) read `.data` off the same envelope.
+    queryFn: (): Promise<AdminUserPage> =>
+      api.get("/admin/users", { schema: adminUserPageSchema, params, rawEnvelope: true }) as Promise<AdminUserPage>,
     staleTime: 20_000,
   });
 }

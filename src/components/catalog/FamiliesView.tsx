@@ -7,12 +7,26 @@ import type { FamilyRow } from "@/lib/api/schemas/catalog";
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  Badge,
+  Card,
+  EmptyState,
+  ErrorState,
+  SkeletonRows,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from "@/components/ui";
 
 /**
  * Attribute families list (attribute-families-list.md, catalog-attribute-
- * families-fe). Table/cards of id/code/name; Create CTA; Delete (default row
- * pre-disabled with tooltip; FAMILY_IN_USE / DEFAULT_FAMILY guarded, no
- * optimistic removal). <Can catalog.attribute.*>.
+ * families-fe) on the AD6 Data Table primitive (design-system §8.6): Card-wrapped
+ * table with eyebrow headers. No pagination — the families endpoint returns a
+ * small bounded set (no page/limit/total). Create CTA; Delete (default row
+ * pre-disabled with tooltip; FAMILY_IN_USE / DEFAULT_FAMILY guarded). <Can>-gated.
  */
 export function FamiliesView() {
   const { data, isLoading, isError, refetch } = useFamilies();
@@ -36,59 +50,63 @@ export function FamiliesView() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Attribute families</h1>
+        <h1 className="text-[22px] font-bold leading-7 text-text">Attribute families</h1>
         <Can permission="catalog.attribute.create">
-          <Link href="/admin/attribute-families/new" className="inline-flex h-10 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white hover:bg-brand-700">New family</Link>
+          <Link
+            href="/admin/attribute-families/new"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent-600 px-4 text-sm font-medium text-accent-fg shadow-xs transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-2"
+          >
+            New family
+          </Link>
         </Can>
       </div>
 
-      {guard && <p role="alert" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{guard}</p>}
+      {guard && <p role="alert" className="rounded-md bg-warning-50 px-3 py-2 text-sm text-warning">{guard}</p>}
 
-      {isLoading ? (
-        <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
-      ) : isError ? (
-        <div className="py-12 text-center">
-          <p className="text-sm text-gray-600">Couldn&apos;t load families.</p>
-          <button type="button" onClick={() => refetch()} className="mt-2 text-sm font-medium text-brand-700 hover:underline">Try again</button>
-        </div>
-      ) : !data || data.length === 0 ? (
-        <p className="py-12 text-center text-sm text-gray-500">No families yet.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-              <th className="py-2 pr-4 font-medium">Code</th>
-              <th className="py-2 pr-4 font-medium">Name</th>
-              <th className="py-2 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((f) => (
-              <tr key={f.id} className="border-b border-gray-100">
-                <td className="py-3 pr-4 font-mono text-xs text-gray-700">{f.code}</td>
-                <td className="py-3 pr-4 font-medium text-gray-900">
-                  {f.name}
-                  {f.is_default && <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">Default</span>}
-                </td>
-                <td className="py-3">
-                  <div className="flex items-center gap-3">
-                    <Can permission="catalog.attribute.update">
-                      <Link href={`/admin/attribute-families/${f.id}`} className="text-sm font-medium text-brand-700 hover:underline">Edit</Link>
-                    </Can>
-                    <Can permission="catalog.attribute.delete">
-                      {f.is_default ? (
-                        <span title="The default family can't be deleted" className="text-sm text-gray-300">Delete</span>
-                      ) : (
-                        <button type="button" onClick={() => setTarget(f)} className="text-sm font-medium text-red-600 hover:underline">Delete</button>
-                      )}
-                    </Can>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <Card>
+        {isLoading ? (
+          <SkeletonRows rows={6} cols={3} />
+        ) : isError ? (
+          <ErrorState description="Couldn't load families." onRetry={() => refetch()} />
+        ) : !data || data.length === 0 ? (
+          <EmptyState title="No families yet." description="Create your first attribute family." />
+        ) : (
+          <Table>
+            <THead>
+              <TR hover={false}>
+                <TH>Code</TH>
+                <TH>Name</TH>
+                <TH className="text-right"><span className="sr-only">Actions</span></TH>
+              </TR>
+            </THead>
+            <TBody>
+              {data.map((f) => (
+                <TR key={f.id}>
+                  <TD className="font-mono text-xs text-text-secondary">{f.code}</TD>
+                  <TD className="font-medium text-text">
+                    {f.name}
+                    {f.is_default && <Badge tone="neutral" className="ml-2">Default</Badge>}
+                  </TD>
+                  <TD className="text-right">
+                    <div className="flex items-center justify-end gap-3">
+                      <Can permission="catalog.attribute.update">
+                        <Link href={`/admin/attribute-families/${f.id}`} className="text-sm font-medium text-accent-700 hover:underline">Edit</Link>
+                      </Can>
+                      <Can permission="catalog.attribute.delete">
+                        {f.is_default ? (
+                          <span title="The default family can't be deleted" className="text-sm text-text-faint">Delete</span>
+                        ) : (
+                          <button type="button" onClick={() => setTarget(f)} className="text-sm font-medium text-error hover:underline">Delete</button>
+                        )}
+                      </Can>
+                    </div>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        )}
+      </Card>
 
       <ConfirmDialog
         open={!!target}

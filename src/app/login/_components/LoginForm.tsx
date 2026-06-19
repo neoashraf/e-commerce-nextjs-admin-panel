@@ -31,6 +31,7 @@ export function LoginForm() {
   // Where to go after a successful sign-in (the shell guard sets ?next= on redirect).
   const next = searchParams.get("next") || "/admin/dashboard";
   const justReset = searchParams.get("reset") === "1";
+  const justActivated = searchParams.get("welcome") === "1";
 
   // null = credentials step; set = 2FA challenge in progress.
   const [challengeId, setChallengeId] = useState<string | null>(null);
@@ -88,6 +89,12 @@ export function LoginForm() {
       {justReset && !formError && (
         <p role="status" className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
           Your password has been reset. Sign in with your new password.
+        </p>
+      )}
+
+      {justActivated && !formError && (
+        <p role="status" className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+          Your account is active. Sign in with your new password.
         </p>
       )}
 

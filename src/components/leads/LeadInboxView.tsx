@@ -41,7 +41,13 @@ export function LeadInboxView() {
           <option value="">All statuses</option><option value="new">New</option><option value="open">Open</option><option value="awaiting_customer">Awaiting customer</option><option value="resolved">Resolved</option>
         </select>
         <select className={inp} value={type} onChange={(e) => setParam("type", e.target.value)}>
-          <option value="">All types</option><option value="general">General</option><option value="order_issue">Order issue</option><option value="claim_return">Claim / return</option>
+          <option value="">All types</option>
+          <option value="general">General</option>
+          <option value="product">Product question</option>
+          <option value="order_issue">Order issue</option>
+          <option value="claim_return">Claim / return</option>
+          <option value="bulk_order">Bulk / team order</option>
+          <option value="feedback">Feedback</option>
         </select>
       </div>
 

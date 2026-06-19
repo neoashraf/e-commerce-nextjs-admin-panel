@@ -67,6 +67,10 @@ const STATUS_MAP: Record<string, { tone: BadgeTone; dot: string }> = {
   // Admin-user lifecycle (RBAC).
   suspended: { tone: "warning", dot: "#D97706" },
   deleted: { tone: "neutral", dot: "#64748B" },
+  // Coupon lifecycle (PROMO).
+  scheduled: { tone: "info", dot: "#06B6D4" },
+  expired: { tone: "neutral", dot: "#64748B" },
+  inactive: { tone: "neutral", dot: "#64748B" },
 };
 
 function humanize(status: string): string {

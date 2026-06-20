@@ -61,7 +61,9 @@ export function TemplatesView() {
       <div className="flex items-center justify-between">
         <h1 className="text-[22px] font-bold leading-7 text-text">Notification templates</h1>
         <div className="flex items-center gap-4">
+          {/* New campaign — hidden per product (kept for re-enable).
           <Can permission="notifications.campaign.send"><Link href="/admin/notifications/campaigns/new" className="text-sm font-medium text-accent-700 hover:underline">New campaign</Link></Can>
+          */}
           <Can permission="notifications.template.create"><Button variant="primary" onClick={() => setAdding((a) => !a)}>{adding ? "Close" : "New template"}</Button></Can>
         </div>
       </div>

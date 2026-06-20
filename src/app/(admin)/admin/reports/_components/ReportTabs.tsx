@@ -33,8 +33,9 @@ export function ReportTabs() {
   const secondary: TabItem[] = [];
   if (can(REPORTS_EXPORT_PERMISSION))
     secondary.push({ key: "exports", label: "Exports", href: "/admin/reports/exports" });
-  if (can(REPORTS_SCHEDULE_PERMISSION))
-    secondary.push({ key: "schedules", label: "Schedules", href: "/admin/reports/schedules" });
+  // Schedules tab — hidden per product (kept commented for re-enable).
+  // if (can(REPORTS_SCHEDULE_PERMISSION))
+  //   secondary.push({ key: "schedules", label: "Schedules", href: "/admin/reports/schedules" });
 
   // The catalog landing redirects to Sales, so treat null as the Sales tab.
   const activeKey = active ?? "sales";

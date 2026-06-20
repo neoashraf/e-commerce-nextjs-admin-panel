@@ -53,6 +53,7 @@ export function ReportViewer({ reportKey }: { reportKey: ReportKey }) {
           <p className="mt-0.5 text-sm text-text-muted">{meta.description}</p>
         </div>
         <div className="flex items-start gap-2">
+          {/* Schedule digest — hidden per product (kept commented for re-enable).
           <Can permission={REPORTS_SCHEDULE_PERMISSION}>
             <Link href="/admin/reports/schedules">
               <Button
@@ -64,6 +65,7 @@ export function ReportViewer({ reportKey }: { reportKey: ReportKey }) {
               </Button>
             </Link>
           </Can>
+          */}
           <ExportButton meta={meta} />
         </div>
       </div>

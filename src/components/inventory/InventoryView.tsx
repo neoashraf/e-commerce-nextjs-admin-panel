@@ -8,6 +8,7 @@ import { useInventory } from "@/lib/api/hooks/useInventory";
 import type { StockRow, StockStatus } from "@/lib/api/schemas/inventory";
 import { Can } from "@/lib/permissions/Can";
 import { Button, Card, EmptyState, ErrorState, SkeletonRows, TablePagination } from "@/components/ui";
+import { StockExportButton } from "@/app/(admin)/admin/inventory/_components/StockExportButton";
 import { StockFilters } from "@/app/(admin)/admin/inventory/_components/StockFilters";
 import { StockTable } from "@/app/(admin)/admin/inventory/_components/StockTable";
 import { StockCard } from "@/app/(admin)/admin/inventory/_components/StockCard";
@@ -105,12 +106,15 @@ export function InventoryView() {
       {/* Header — read-only (records are auto-created by CAT; no Create CTA). */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">Stock</h1>
-        <Can permission={STOCK_MUTATE_PERMISSION}>
-          <Link href="/admin/inventory/bulk" className={secondaryLink}>
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            Bulk update
-          </Link>
-        </Can>
+        <div className="flex items-start gap-2">
+          <StockExportButton status={status} />
+          <Can permission={STOCK_MUTATE_PERMISSION}>
+            <Link href="/admin/inventory/bulk" className={secondaryLink}>
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              Bulk update
+            </Link>
+          </Can>
+        </div>
       </div>
 
       {!online && (

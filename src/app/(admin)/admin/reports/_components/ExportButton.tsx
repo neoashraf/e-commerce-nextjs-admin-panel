@@ -52,19 +52,27 @@ export function ExportButton({ meta }: { meta: ReportMeta }) {
     a.remove();
   }, [ready, fileUrl, exportId, meta.key]);
 
+  // Raw-data CSV export lives in each module's own page (Orders, Stock, Customers, …), so the Reports
+  // viewer offers CSV only for Sales (which has no dedicated module). PDF (formatted report) stays where
+  // available. If a report has neither, render no export action.
+  const showCsv = meta.key === "sales";
+  if (!showCsv && !meta.pdf) return null;
+
   return (
     <Can permission={REPORTS_EXPORT_PERMISSION}>
       <div className="flex flex-col items-end gap-1">
         <div className="flex gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => submit("csv")}
-            disabled={busy}
-            leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
-          >
-            Export CSV
-          </Button>
+          {showCsv && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => submit("csv")}
+              disabled={busy}
+              leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
+            >
+              Export CSV
+            </Button>
+          )}
           {meta.pdf && (
             <Button
               variant="secondary"

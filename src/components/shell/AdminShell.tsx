@@ -27,6 +27,22 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
   }, []);
 
+  // Lock the page behind the fixed shell so it can never scroll on admin routes
+  // (the shell is `fixed inset-0`; scrolling lives inside <main>). Scoped to the
+  // shell's lifetime and restored on unmount so auth pages (login/forgot/reset),
+  // which legitimately scroll, are unaffected.
+  useEffect(() => {
+    const { documentElement: html, body } = document;
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+    };
+  }, []);
+
   const toggleCollapsed = () =>
     setCollapsed((c) => {
       const next = !c;
@@ -38,10 +54,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   useAdminNotificationStream();
 
   return (
-    // h-screen + overflow-hidden makes the shell own the full viewport height so
-    // the sidebar and the main content scroll independently (the sidebar stays
-    // put while only <main> scrolls), instead of the page scrolling as one unit.
-    <div className="flex h-screen overflow-hidden bg-canvas">
+    // `fixed inset-0` pins the shell to the exact viewport rect and takes it out
+    // of normal flow, so the page body has nothing to scroll — the sidebar and
+    // topbar are immovable and only <main> scrolls. (h-screen/100vh alone left a
+    // few px of body scroll on some browsers — mobile URL-bar vh quirks, sub-px
+    // rounding — which drifted the chrome; fixed positioning removes that class
+    // of bug entirely.)
+    <div className="fixed inset-0 flex overflow-hidden bg-canvas">
       {/* Desktop sidebar — collapses to an icon rail; the Sidebar owns its
           internal scroll (brand block stays put). */}
       <aside
@@ -66,14 +85,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Main column — the topbar stays fixed; only <main> scrolls. */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      {/* Main column — the topbar stays fixed; only <main> scrolls. min-h-0 is
+          what makes that true: a flex-col item defaults to min-height:auto and
+          won't shrink below its content, so without it <main> grows to its full
+          content height, the h-screen box is exceeded, and the WHOLE PAGE
+          scrolls (carrying the sidebar + topbar away) instead of just <main>. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar
           onMenuClick={() => setMobileOpen(true)}
           onToggleCollapse={toggleCollapsed}
           collapsed={collapsed}
         />
-        <main className="no-scrollbar flex-1 overflow-y-auto p-4 md:p-6">
+        {/* min-w-0: lets the column shrink below intrinsic content width so a wide
+            child (a min-w table, a recharts ResponsiveContainer) scrolls inside
+            instead of shoving the sidebar.
+            min-h-0: lets <main> shrink below its content height so its own
+            overflow-y-auto engages and the page chrome stays put. */}
+        <main className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
           <PermissionBoundary>{children}</PermissionBoundary>
         </main>
       </div>

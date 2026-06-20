@@ -45,7 +45,7 @@ function TabLink({
     </>
   );
   const className = cn(
-    "relative -mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors",
+    "relative -mb-px inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
     active
       ? "border-accent-600 text-text"
@@ -90,9 +90,25 @@ export function Tabs({
   className?: string;
 }) {
   return (
-    <div className={cn("border-b border-border", className)}>
-      <div className="flex items-center justify-between gap-6 overflow-x-auto no-scrollbar">
-        <nav className="flex items-center gap-6" aria-label="Sections">
+    // The right-edge fade hints "more tabs — swipe" when the track overflows on
+    // narrow screens; it's masked away once everything fits (md+). The track
+    // itself is the horizontal slider: scroll-snap + momentum scroll on touch.
+    <div className={cn("relative border-b border-border", className)}>
+      <div
+        className={cn(
+          "no-scrollbar -mb-px flex snap-x items-center gap-5 overflow-x-auto",
+          // Edge padding so the first/last tab never sits flush against (and gets
+          // visually clipped by) the viewport edge while scrolling.
+          "px-0.5 sm:gap-6",
+          // On md+ there's room for the full bar, so spread primary ↔ secondary.
+          "md:justify-between md:overflow-visible",
+        )}
+        style={{ scrollbarWidth: "none" }}
+      >
+        <nav
+          className="flex shrink-0 items-center gap-5 sm:gap-6"
+          aria-label="Sections"
+        >
           {items.map((item) => (
             <TabLink
               key={item.key}
@@ -104,7 +120,7 @@ export function Tabs({
         </nav>
         {secondary && secondary.length > 0 && (
           <nav
-            className="flex items-center gap-6 border-l border-border pl-6"
+            className="flex shrink-0 items-center gap-5 border-l border-border pl-5 sm:gap-6 sm:pl-6"
             aria-label="Manage"
           >
             {secondary.map((item) => (
@@ -118,6 +134,11 @@ export function Tabs({
           </nav>
         )}
       </div>
+      {/* Fade affordance — only visible while the track can scroll (hidden md+). */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-canvas to-transparent md:hidden"
+      />
     </div>
   );
 }

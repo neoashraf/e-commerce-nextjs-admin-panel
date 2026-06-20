@@ -1,106 +1,81 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { z } from "zod";
 import { Download } from "lucide-react";
 import { Can } from "@/lib/permissions/Can";
 import { Button } from "@/components/ui";
-import { useCreateExport, useExportStatus } from "@/lib/api/hooks/reports";
-import type { ExportFormat } from "@/lib/api/schemas/reports";
+import { orderRowSchema } from "@/lib/api/hooks/useOrdersAdmin";
+import { fetchAllRows, buildCsv, downloadCsv, todayStamp } from "@/lib/exportCsv";
 
-/** Export is gated on the reports export permission (the backend POST /admin/reports/export check). */
+/** Export is gated on the reports export permission (parity with the rest of the admin). */
 const EXPORT_PERMISSION = "reports.report.export";
 
 /**
- * CSV/PDF export for the admin Orders list. Reuses the async reports-export pipeline
- * (POST /admin/reports/export → poll → ready) with the `orders_list` report key, passing the list's
- * current filters so the file matches what's on screen. Downloads in one click the moment it's ready
- * (the API serves the file with Content-Disposition: attachment).
+ * CSV export for the admin Orders list — done CLIENT-SIDE: fetch every page of the (filtered) orders
+ * list and serialize to CSV in the browser, then download. This replaces the async reports-export
+ * pipeline (POST /admin/reports/export), which returned status:failed; building the file here is reliable
+ * and always matches the on-screen filters. (The async pipeline + Exports manager are kept on the backend.)
  */
 export function OrdersExportButton({
   filters,
 }: {
   filters: { q?: string; status?: string; payment_state?: string; from?: string; to?: string };
 }) {
-  const create = useCreateExport();
-  const [exportId, setExportId] = useState<string | null>(null);
-  const status = useExportStatus(exportId);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
 
-  const submit = (format: ExportFormat) => {
-    const params: Record<string, unknown> = {};
-    if (filters.q) params.q = filters.q;
-    if (filters.status) params.status = filters.status;
-    if (filters.payment_state) params.payment_state = filters.payment_state;
-    if (filters.from) params.from = filters.from;
-    if (filters.to) params.to = filters.to;
-    create.mutate(
-      { report_key: "orders_list", params, format },
-      { onSuccess: (r) => setExportId(r.export_id) },
-    );
+  const onExport = async () => {
+    setBusy(true);
+    setError(false);
+    try {
+      const rows = await fetchAllRows(
+        "/admin/orders",
+        {
+          q: filters.q,
+          status: filters.status,
+          payment_state: filters.payment_state,
+          from: filters.from,
+          to: filters.to,
+        },
+        z.array(orderRowSchema),
+      );
+      const csv = buildCsv(
+        ["Order", "Customer", "Phone", "Status", "Payment method", "Payment state", "Total", "Placed at"],
+        rows.map((o) => [
+          o.order_no,
+          o.customer?.name ?? "",
+          o.customer?.phone ?? "",
+          o.status,
+          o.payment_method ?? "",
+          o.payment_state ?? "",
+          o.grand_total ?? "",
+          o.placed_at ?? "",
+        ]),
+      );
+      downloadCsv(`orders-${todayStamp()}.csv`, csv);
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
   };
-
-  const state = status.data?.status;
-  const fileUrl = status.data?.file_url ?? null;
-  const ready = state === "ready" && !!fileUrl;
-  const failed = state === "failed" || create.isError;
-  const busy = create.isPending || state === "processing";
-
-  // One-click download: trigger the save as soon as the export is ready (no second click). The API
-  // sends Content-Disposition: attachment, so a plain link navigation downloads the file directly —
-  // no cross-origin fetch needed. `downloadedFor` guards against re-firing while polling holds `ready`.
-  const downloadedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!ready || !fileUrl || !exportId || downloadedFor.current === exportId) return;
-    downloadedFor.current = exportId;
-    const a = document.createElement("a");
-    a.href = fileUrl;
-    a.download = fileUrl.split("/").pop() ?? "orders-export";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }, [ready, fileUrl, exportId]);
 
   return (
     <Can permission={EXPORT_PERMISSION}>
       <div className="flex flex-col items-end gap-1">
-        <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => submit("csv")}
-            disabled={busy}
-            leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
-          >
-            Export CSV
-          </Button>
-          {/* TEMP (commented out per request, 2026-06-20): Export PDF button.
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => submit("pdf")}
-            disabled={busy}
-          >
-            Export PDF
-          </Button>
-          */}
-        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onExport}
+          disabled={busy}
+          leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
+        >
+          {busy ? "Exporting…" : "Export CSV"}
+        </Button>
         <p aria-live="polite" className="text-xs">
-          {busy && (
-            <span className="text-text-muted">Export is processing — we&apos;ll have it ready shortly.</span>
-          )}
-          {failed && <span className="text-error">Export failed. Try again.</span>}
-          {ready && (
-            <span className="text-text-muted">
-              Downloaded.{" "}
-              <a
-                href={fileUrl!}
-                className="font-medium text-accent-700 hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Save again
-              </a>
-            </span>
-          )}
+          {busy && <span className="text-text-muted">Preparing your CSV…</span>}
+          {error && <span className="text-error">Export failed. Try again.</span>}
         </p>
       </div>
     </Can>

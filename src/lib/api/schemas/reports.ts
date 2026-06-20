@@ -99,15 +99,21 @@ export const productsReportSchema = z.array(productRowSchema);
 
 // ── Inventory report (FR-RPT-030/031) — rpt-fe-remaining-reports ──────────────
 
-/** levels/low_stock/out_of_stock return rows; movement returns a summary object. */
+/**
+ * levels/low_stock/out_of_stock return rows; movement returns a summary object.
+ * Field names mirror the backend StockLevelRow (sku_code, low_stock_threshold, status) — the
+ * same shape as GET /admin/inventory.
+ */
 export const inventoryLevelRowSchema = z.object({
-  sku: z.string(),
-  product_title: z.string().optional(),
-  variant: z.string().optional(),
+  variant_id: z.string().optional(),
+  product_id: z.string().nullable().optional(),
+  sku_code: z.string(),
+  product_title: z.string().nullable().optional(),
   on_hand: z.number().optional(),
   reserved: z.number().optional(),
   available: z.number().optional(),
-  reorder_point: z.number().optional(),
+  low_stock_threshold: z.number().optional(),
+  status: z.string().optional(),
 });
 export type InventoryLevelRow = z.infer<typeof inventoryLevelRowSchema>;
 

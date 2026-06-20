@@ -22,16 +22,14 @@ function isMovement(
   return !!data && !Array.isArray(data);
 }
 
-/** Stock status derived from available + reorder_point (no fabricated fields). */
+/** Prefer the backend-derived status; fall back to available vs low-stock threshold. */
 function stockStatus(r: InventoryLevelRow): "out-of-stock" | "low-stock" | "in-stock" {
+  if (r.status === "out_of_stock") return "out-of-stock";
+  if (r.status === "low_stock") return "low-stock";
+  if (r.status === "in_stock") return "in-stock";
   const avail = r.available ?? r.on_hand;
   if (avail != null && avail <= 0) return "out-of-stock";
-  if (
-    avail != null &&
-    r.reorder_point != null &&
-    avail <= r.reorder_point
-  )
-    return "low-stock";
+  if (avail != null && r.low_stock_threshold != null && avail <= r.low_stock_threshold) return "low-stock";
   return "in-stock";
 }
 
@@ -47,12 +45,12 @@ export function InventoryReport({ meta }: { meta: ReportMeta }) {
   const onHandTotal = rows.reduce((s, r) => s + (r.on_hand ?? 0), 0);
 
   const cols: Column<InventoryLevelRow>[] = [
-    { header: "SKU", cell: (r) => r.sku },
+    { header: "SKU", cell: (r) => r.sku_code },
     { header: "Product", cell: (r) => r.product_title ?? "—" },
-    { header: "Variant", cell: (r) => r.variant ?? "—" },
     { header: "On hand", align: "right", cell: (r) => r.on_hand ?? "—" },
     { header: "Reserved", align: "right", cell: (r) => r.reserved ?? "—" },
     { header: "Available", align: "right", cell: (r) => r.available ?? "—" },
+    { header: "Threshold", align: "right", cell: (r) => r.low_stock_threshold ?? "—" },
     { header: "Stock", cell: (r) => <StatusPill status={stockStatus(r)} /> },
   ];
 
@@ -107,7 +105,7 @@ export function InventoryReport({ meta }: { meta: ReportMeta }) {
               caption="Inventory levels"
               columns={cols}
               rows={rows}
-              rowKey={(r) => r.sku}
+              rowKey={(r) => r.variant_id ?? r.sku_code}
             />
           </Section>
         </div>

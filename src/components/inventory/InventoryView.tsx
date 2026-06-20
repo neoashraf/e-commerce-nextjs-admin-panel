@@ -107,7 +107,7 @@ export function InventoryView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">Stock</h1>
         <div className="flex items-start gap-2">
-          <StockExportButton status={status} />
+          <StockExportButton status={status} q={q} />
           <Can permission={STOCK_MUTATE_PERMISSION}>
             <Link href="/admin/inventory/bulk" className={secondaryLink}>
               <Upload className="h-4 w-4" aria-hidden="true" />

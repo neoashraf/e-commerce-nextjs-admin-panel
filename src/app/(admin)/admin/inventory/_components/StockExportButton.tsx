@@ -1,56 +1,58 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Download } from "lucide-react";
 import { Can } from "@/lib/permissions/Can";
 import { Button } from "@/components/ui";
-import { useCreateExport, useExportStatus } from "@/lib/api/hooks/reports";
+import { stockListSchema } from "@/lib/api/schemas/inventory";
+import { fetchAllRows, buildCsv, downloadCsv, todayStamp } from "@/lib/exportCsv";
 
-/** Export is gated on the reports export permission (backend POST /admin/reports/export check). */
+/** Export is gated on the reports export permission (parity with the rest of the admin). */
 const EXPORT_PERMISSION = "reports.report.export";
 
+/** Render a variant's options map ({Color:"Black", Size:"M"}) as "Color: Black · Size: M". */
+function optionsLabel(options: Record<string, string> | null | undefined): string {
+  if (!options) return "";
+  return Object.entries(options)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(" · ");
+}
+
 /**
- * Export the stock list to CSV. Reuses the async reports-export pipeline
- * (POST /admin/reports/export → poll → ready) with the `inventory` report, mapping the list's
- * status filter to the report `view` (levels = all, low_stock, out_of_stock) so the file matches the
- * on-screen view. Downloads the moment it's ready (the API serves it with Content-Disposition: attachment).
+ * Export the stock list to CSV — done CLIENT-SIDE: fetch every page of the (filtered) inventory list
+ * and serialize to CSV in the browser, then download. Replaces the async reports-export pipeline
+ * (POST /admin/reports/export, report `inventory`), which returned status:failed; building the file
+ * here is reliable and always matches the on-screen search + status filter.
  */
-export function StockExportButton({ status }: { status?: string }) {
-  const create = useCreateExport();
-  const [exportId, setExportId] = useState<string | null>(null);
-  const exportStatus = useExportStatus(exportId);
+export function StockExportButton({ status, q }: { status?: string; q?: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
 
-  const submit = () => {
-    const view =
-      status === "low_stock"
-        ? "low_stock"
-        : status === "out_of_stock"
-          ? "out_of_stock"
-          : "levels";
-    create.mutate(
-      { report_key: "inventory", params: { view }, format: "csv" },
-      { onSuccess: (r) => setExportId(r.export_id) },
-    );
+  const onExport = async () => {
+    setBusy(true);
+    setError(false);
+    try {
+      const rows = await fetchAllRows("/admin/inventory", { q, status }, stockListSchema);
+      const csv = buildCsv(
+        ["SKU", "Product", "Options", "On-hand", "Reserved", "Available", "Low-stock threshold", "Status"],
+        rows.map((r) => [
+          r.sku_code,
+          r.product_title ?? "",
+          optionsLabel(r.options),
+          r.on_hand,
+          r.reserved,
+          r.available,
+          r.low_stock_threshold,
+          r.status,
+        ]),
+      );
+      downloadCsv(`stock-${todayStamp()}.csv`, csv);
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
   };
-
-  const state = exportStatus.data?.status;
-  const fileUrl = exportStatus.data?.file_url ?? null;
-  const ready = state === "ready" && !!fileUrl;
-  const failed = state === "failed" || create.isError;
-  const busy = create.isPending || state === "processing";
-
-  // One-click download the moment the export is ready (no second click).
-  const downloadedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!ready || !fileUrl || !exportId || downloadedFor.current === exportId) return;
-    downloadedFor.current = exportId;
-    const a = document.createElement("a");
-    a.href = fileUrl;
-    a.download = fileUrl.split("/").pop() ?? "stock-export.csv";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }, [ready, fileUrl, exportId]);
 
   return (
     <Can permission={EXPORT_PERMISSION}>
@@ -58,30 +60,15 @@ export function StockExportButton({ status }: { status?: string }) {
         <Button
           variant="secondary"
           size="sm"
-          onClick={submit}
+          onClick={onExport}
           disabled={busy}
           leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
         >
-          Export CSV
+          {busy ? "Exporting…" : "Export CSV"}
         </Button>
         <p aria-live="polite" className="text-xs">
-          {busy && (
-            <span className="text-text-muted">Export is processing — ready shortly.</span>
-          )}
-          {failed && <span className="text-error">Export failed. Try again.</span>}
-          {ready && (
-            <span className="text-text-muted">
-              Downloaded.{" "}
-              <a
-                href={fileUrl!}
-                className="font-medium text-accent-700 hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Save again
-              </a>
-            </span>
-          )}
+          {busy && <span className="text-text-muted">Preparing your CSV…</span>}
+          {error && <span className="text-error">Export failed. Try again.</span>}
         </p>
       </div>
     </Can>

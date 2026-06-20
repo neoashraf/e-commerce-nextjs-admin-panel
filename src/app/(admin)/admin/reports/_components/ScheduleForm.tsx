@@ -87,7 +87,7 @@ export function ScheduleForm({
   const [submitted, setSubmitted] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  const activeAdmins = useMemo(() => admins ?? [], [admins]);
+  const activeAdmins = useMemo(() => admins?.data ?? [], [admins]);
   const adminsLoaded = admins !== undefined;
   const recipientsError =
     submitted && recipients.length === 0 ? "Add at least one recipient." : null;

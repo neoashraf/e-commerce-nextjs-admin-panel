@@ -105,7 +105,11 @@ export function Topbar({
         </kbd>
       </div>
 
-      <div className="flex flex-1 items-center justify-end gap-2.5 sm:flex-none">
+      {/* Keep flex-1 + justify-end at every breakpoint so this block absorbs the
+          row's free space and pins the bell + account menu to the right corner.
+          (With sm:flex-none the capped search left the space orphaned, floating
+          the account block mid-row on wide screens.) */}
+      <div className="flex flex-1 items-center justify-end gap-2.5">
         <NotificationBell />
 
         {/* Hairline divider between the bell and the account menu (§7.2). */}

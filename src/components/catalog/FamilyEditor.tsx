@@ -34,7 +34,7 @@ export function FamilyEditor({ mode, family }: { mode: "create" | "edit"; family
 
   const assigned = useMemo(() => new Set(groups.flatMap((g) => g.attribute_codes)), [groups]);
   const pool = useMemo(
-    () => (allAttributes ?? []).map((a) => a.code).filter((c) => !assigned.has(c)),
+    () => (allAttributes?.data ?? []).map((a) => a.code).filter((c) => !assigned.has(c)),
     [allAttributes, assigned],
   );
 

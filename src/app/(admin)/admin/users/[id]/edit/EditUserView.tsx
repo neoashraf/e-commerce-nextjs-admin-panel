@@ -13,7 +13,7 @@ export function EditUserView({ id }: { id: string }) {
   const { data, isLoading, isError } = useAdminUsers({ include_deleted: true, page: 1, limit: 200 });
 
   if (isLoading) return <div className="h-64 animate-pulse rounded-lg bg-gray-100" />;
-  const user = data?.find((u) => u.id === id);
+  const user = data?.data.find((u) => u.id === id);
 
   if (isError || !user) {
     return (

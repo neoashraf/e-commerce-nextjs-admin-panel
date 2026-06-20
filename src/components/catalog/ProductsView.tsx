@@ -3,27 +3,42 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Search } from "lucide-react";
 import { useProducts, useProductStatus, useDeleteProduct, useFamilies } from "@/lib/api/hooks/useCatalog";
-import type { ProductRow, ProductStatus } from "@/lib/api/schemas/catalog";
+import type { ProductRow } from "@/lib/api/schemas/catalog";
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
 import { formatBDT } from "@/lib/format";
 import { resolveMediaUrl } from "@/lib/media";
 import { toast } from "@/lib/stores/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  Badge,
+  Card,
+  EmptyState,
+  ErrorState,
+  Input,
+  Select,
+  SkeletonRows,
+  StatusPill,
+  Table,
+  TablePagination,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from "@/components/ui";
 
 /**
- * Products list (products-list.md, catalog-products-list-fe). Rich rows
- * (thumbnail, name/sku/family, ৳ price, live INV qty, status badge, category,
- * type pill); URL-reflected search + status/family/type filters + per-page;
- * row actions (publish/archive/delete) with NOT_PUBLISHABLE (422) +
- * PRODUCT_IN_ORDER (409) guards. Create/Edit link to the editor (AFW3).
+ * Products list (products-list.md, catalog-products-list-fe) on the AD6 Data Table
+ * primitive (design-system §8.6): Card-wrapped table, eyebrow headers, StatusPill,
+ * right-aligned numerics, and a 15/page paginated footer backed by the API
+ * `meta.total`. URL-reflected search + status/family/type filters + `page`; row
+ * actions (publish/archive/delete) with NOT_PUBLISHABLE (422) + PRODUCT_IN_ORDER
+ * (409) guards. Behaviour unchanged — presentation + pagination only.
  */
-const STATUS_STYLE: Record<ProductStatus, string> = {
-  draft: "bg-gray-100 text-gray-600",
-  published: "bg-green-50 text-green-700",
-  archived: "bg-amber-50 text-amber-700",
-};
+const PAGE_SIZE = 15;
 
 export function ProductsView() {
   const router = useRouter();
@@ -33,18 +48,23 @@ export function ProductsView() {
   const family = sp.get("family") ?? "";
   const type = sp.get("type") ?? "";
   const q = sp.get("q") ?? "";
+  const page = Math.max(1, Number(sp.get("page") ?? "1") || 1);
 
   const { data, isLoading, isError, refetch } = useProducts({
-    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, page: 1, limit: 50,
+    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, page, limit: PAGE_SIZE,
   });
   const { data: families } = useFamilies();
   const statusM = useProductStatus();
   const del = useDeleteProduct();
   const [confirm, setConfirm] = useState<{ kind: "archive" | "delete"; product: ProductRow } | null>(null);
 
+  const rows = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
+
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(sp.toString());
     if (value) next.set(key, value); else next.delete(key);
+    if (key !== "page") next.delete("page"); // filter/search change → back to page 1
     router.push(`${pathname}?${next.toString()}`);
   }
 
@@ -81,97 +101,116 @@ export function ProductsView() {
     }
   }
 
-  const inp = "h-10 rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
-
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Products</h1>
+        <h1 className="text-[22px] font-bold leading-7 text-text">Products</h1>
         <Can permission="catalog.product.create">
-          <Link href="/admin/products/new" className="inline-flex h-10 items-center rounded-md bg-brand-600 px-4 text-sm font-medium text-white hover:bg-brand-700">Create product</Link>
+          <Link
+            href="/admin/products/new"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent-600 px-4 text-sm font-medium text-accent-fg shadow-xs transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-2"
+          >
+            Create product
+          </Link>
         </Can>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <input className={inp + " w-64"} placeholder="Search name or SKU…" defaultValue={q} onKeyDown={(e) => e.key === "Enter" && setParam("q", (e.target as HTMLInputElement).value)} />
-        <select className={inp} value={status} onChange={(e) => setParam("status", e.target.value)}>
-          <option value="">All statuses</option>
-          <option value="draft">Draft</option>
-          <option value="published">Published</option>
-          <option value="archived">Archived</option>
-        </select>
-        <select className={inp} value={family} onChange={(e) => setParam("family", e.target.value)}>
-          <option value="">All families</option>
-          {families?.map((f) => <option key={f.id} value={f.code}>{f.name}</option>)}
-        </select>
-        <select className={inp} value={type} onChange={(e) => setParam("type", e.target.value)}>
-          <option value="">All types</option>
-          <option value="simple">Simple</option>
-          <option value="configurable">Configurable</option>
-        </select>
+        <div className="w-full sm:w-64">
+          <Input
+            leadingIcon={<Search className="h-4 w-4" />}
+            placeholder="Search name or SKU…"
+            aria-label="Search products"
+            defaultValue={q}
+            onKeyDown={(e) => e.key === "Enter" && setParam("q", (e.target as HTMLInputElement).value)}
+          />
+        </div>
+        <div className="w-40">
+          <Select aria-label="Status" value={status} onChange={(e) => setParam("status", e.target.value)}>
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="archived">Archived</option>
+          </Select>
+        </div>
+        <div className="w-44">
+          <Select aria-label="Family" value={family} onChange={(e) => setParam("family", e.target.value)}>
+            <option value="">All families</option>
+            {families?.map((f) => <option key={f.id} value={f.code}>{f.name}</option>)}
+          </Select>
+        </div>
+        <div className="w-40">
+          <Select aria-label="Type" value={type} onChange={(e) => setParam("type", e.target.value)}>
+            <option value="">All types</option>
+            <option value="simple">Simple</option>
+            <option value="configurable">Configurable</option>
+          </Select>
+        </div>
       </div>
 
-      {isLoading ? (
-        <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
-      ) : isError ? (
-        <div className="py-12 text-center">
-          <p className="text-sm text-gray-600">Couldn&apos;t load products.</p>
-          <button type="button" onClick={() => refetch()} className="mt-2 text-sm font-medium text-brand-700 hover:underline">Try again</button>
-        </div>
-      ) : !data || data.length === 0 ? (
-        <p className="py-12 text-center text-sm text-gray-500">No products match your filters.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-              <th className="py-2 pr-4 font-medium">Product</th>
-              <th className="py-2 pr-4 font-medium">Price</th>
-              <th className="py-2 pr-4 font-medium">Qty</th>
-              <th className="py-2 pr-4 font-medium">Status</th>
-              <th className="py-2 pr-4 font-medium">Category</th>
-              <th className="py-2 pr-4 font-medium">Type</th>
-              <th className="py-2 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((p) => (
-              <tr key={p.id} className="border-b border-gray-100">
-                <td className="py-3 pr-4">
-                  <div className="flex items-center gap-3">
-                    <span className="h-10 w-10 shrink-0 overflow-hidden rounded bg-gray-100">
-                      {p.primary_image && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={resolveMediaUrl(p.primary_image)} alt="" className="h-full w-full object-cover" />
-                      )}
-                    </span>
-                    <span className="min-w-0">
-                      <Link href={`/admin/products/${p.id}`} className="block truncate font-medium text-gray-900 hover:text-brand-700">{p.name}</Link>
-                      <span className="block truncate text-xs text-gray-400">{p.sku ?? "—"}{p.family ? ` · ${p.family}` : ""}</span>
-                    </span>
-                  </div>
-                </td>
-                <td className="py-3 pr-4 text-gray-700">{p.base_price ? formatBDT(Number(p.base_price)) : "—"}</td>
-                <td className="py-3 pr-4">{p.qty == null ? <span title="Stock unavailable" className="text-gray-300">—</span> : <span className="text-gray-700">{p.qty}</span>}</td>
-                <td className="py-3 pr-4"><span className={"rounded-full px-2 py-0.5 text-xs font-medium " + STATUS_STYLE[p.status]}>{p.status}</span></td>
-                <td className="py-3 pr-4 text-gray-600">{p.primary_category ?? "—"}</td>
-                <td className="py-3 pr-4"><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">{p.type ?? "simple"}</span></td>
-                <td className="py-3">
-                  <div className="flex items-center gap-3">
-                    <Can permission="catalog.product.update">
-                      <Link href={`/admin/products/${p.id}`} className="text-sm font-medium text-brand-700 hover:underline">Edit</Link>
-                      {p.status === "draft" && <button type="button" onClick={() => publish(p)} className="text-sm font-medium text-green-700 hover:underline">Publish</button>}
-                      {p.status === "published" && <button type="button" onClick={() => setConfirm({ kind: "archive", product: p })} className="text-sm font-medium text-amber-700 hover:underline">Archive</button>}
-                    </Can>
-                    <Can permission="catalog.product.delete">
-                      <button type="button" onClick={() => setConfirm({ kind: "delete", product: p })} className="text-sm font-medium text-red-600 hover:underline">Delete</button>
-                    </Can>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <Card>
+        {isLoading ? (
+          <SkeletonRows rows={10} cols={7} />
+        ) : isError ? (
+          <ErrorState description="Couldn't load products." onRetry={() => refetch()} />
+        ) : rows.length === 0 ? (
+          <EmptyState title="No products match your filters." description="Try clearing search or widening the filters." />
+        ) : (
+          <>
+            <Table>
+              <THead>
+                <TR hover={false}>
+                  <TH>Product</TH>
+                  <TH numeric>Price</TH>
+                  <TH numeric>Qty</TH>
+                  <TH>Status</TH>
+                  <TH>Category</TH>
+                  <TH>Type</TH>
+                  <TH className="text-right"><span className="sr-only">Actions</span></TH>
+                </TR>
+              </THead>
+              <TBody>
+                {rows.map((p) => (
+                  <TR key={p.id}>
+                    <TD>
+                      <div className="flex items-center gap-3">
+                        <span className="h-10 w-10 shrink-0 overflow-hidden rounded bg-surface-subtle">
+                          {p.primary_image && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={resolveMediaUrl(p.primary_image)} alt="" className="h-full w-full object-cover" />
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <Link href={`/admin/products/${p.id}`} className="block truncate font-medium text-text hover:text-accent-700">{p.name}</Link>
+                          <span className="block truncate text-xs text-text-muted">{p.sku ?? "—"}{p.family ? ` · ${p.family}` : ""}</span>
+                        </span>
+                      </div>
+                    </TD>
+                    <TD numeric className="text-text">{p.base_price ? formatBDT(Number(p.base_price)) : "—"}</TD>
+                    <TD numeric>{p.qty == null ? <span title="Stock unavailable" className="text-text-faint">—</span> : p.qty}</TD>
+                    <TD><StatusPill status={p.status} /></TD>
+                    <TD>{p.primary_category ?? "—"}</TD>
+                    <TD><Badge tone="neutral">{p.type ?? "simple"}</Badge></TD>
+                    <TD className="text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <Can permission="catalog.product.update">
+                          <Link href={`/admin/products/${p.id}`} className="text-sm font-medium text-accent-700 hover:underline">Edit</Link>
+                          {p.status === "draft" && <button type="button" onClick={() => publish(p)} className="text-sm font-medium text-success hover:underline">Publish</button>}
+                          {p.status === "published" && <button type="button" onClick={() => setConfirm({ kind: "archive", product: p })} className="text-sm font-medium text-warning hover:underline">Archive</button>}
+                        </Can>
+                        <Can permission="catalog.product.delete">
+                          <button type="button" onClick={() => setConfirm({ kind: "delete", product: p })} className="text-sm font-medium text-error hover:underline">Delete</button>
+                        </Can>
+                      </div>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(p) => setParam("page", String(p))} />
+          </>
+        )}
+      </Card>
 
       <ConfirmDialog
         open={!!confirm}

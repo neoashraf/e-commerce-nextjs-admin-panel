@@ -50,10 +50,27 @@ const STATUS_MAP: Record<string, { tone: BadgeTone; dot: string }> = {
   active: { tone: "success", dot: "#16A34A" },
   "in-stock": { tone: "success", dot: "#16A34A" },
   cancelled: { tone: "neutral", dot: "#64748B" },
+  // Catalog product lifecycle (CAT).
+  draft: { tone: "neutral", dot: "#64748B" },
+  published: { tone: "success", dot: "#16A34A" },
+  archived: { tone: "warning", dot: "#D97706" },
   refunded: { tone: "neutral", dot: "#8B5CF6" },
   failed: { tone: "error", dot: "#DC2626" },
   "out-of-stock": { tone: "error", dot: "#DC2626" },
   "low-stock": { tone: "warning", dot: "#D97706" },
+  // Lead inbox statuses (LEAD).
+  new: { tone: "info", dot: "#06B6D4" },
+  open: { tone: "success", dot: "#16A34A" },
+  "awaiting-customer": { tone: "warning", dot: "#D97706" },
+  resolved: { tone: "neutral", dot: "#64748B" },
+  closed: { tone: "neutral", dot: "#64748B" },
+  // Admin-user lifecycle (RBAC).
+  suspended: { tone: "warning", dot: "#D97706" },
+  deleted: { tone: "neutral", dot: "#64748B" },
+  // Coupon lifecycle (PROMO).
+  scheduled: { tone: "info", dot: "#06B6D4" },
+  expired: { tone: "neutral", dot: "#64748B" },
+  inactive: { tone: "neutral", dot: "#64748B" },
 };
 
 function humanize(status: string): string {

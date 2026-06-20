@@ -72,6 +72,7 @@ export function OrdersExportButton({
           >
             Export CSV
           </Button>
+          {/* TEMP (commented out per request, 2026-06-20): Export PDF button.
           <Button
             variant="ghost"
             size="sm"
@@ -80,6 +81,7 @@ export function OrdersExportButton({
           >
             Export PDF
           </Button>
+          */}
         </div>
         <p aria-live="polite" className="text-xs">
           {busy && (

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginated } from "@/lib/api/schemas/pagination";
 
 /**
  * Zod schemas for the admin catalog — categories + attributes (for the
@@ -83,6 +84,9 @@ export const attributeRowSchema = z.object({
 });
 export type AttributeRow = z.infer<typeof attributeRowSchema>;
 export const attributeListSchema = z.array(attributeRowSchema);
+/** Paginated envelope for GET /admin/attributes (rawEnvelope: { data, meta }). */
+export const attributePageSchema = paginated(attributeListSchema);
+export type AttributePage = z.infer<typeof attributePageSchema>;
 
 export const attributeOptionSchema = z.object({
   id: z.string().optional(),
@@ -179,6 +183,9 @@ export const productRowSchema = z.object({
 });
 export type ProductRow = z.infer<typeof productRowSchema>;
 export const productListSchema = z.array(productRowSchema);
+/** Paginated envelope for GET /admin/products (rawEnvelope: { data, meta }). */
+export const productPageSchema = paginated(productListSchema);
+export type ProductPage = z.infer<typeof productPageSchema>;
 
 export const productVariantSchema = z.object({
   id: z.string(),

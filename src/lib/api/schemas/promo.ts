@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginated } from "@/lib/api/schemas/pagination";
 
 /**
  * Zod schemas for admin coupons (GET/POST/PATCH/DELETE /admin/coupons —
@@ -16,6 +17,9 @@ export const couponRowSchema = z.object({
 });
 export type CouponRow = z.infer<typeof couponRowSchema>;
 export const couponListSchema = z.array(couponRowSchema);
+/** Paginated envelope for GET /admin/coupons (rawEnvelope: { data, meta }). */
+export const couponPageSchema = paginated(couponListSchema);
+export type CouponPage = z.infer<typeof couponPageSchema>;
 
 export const couponDetailSchema = couponRowSchema.extend({
   description: z.string().nullable().optional(),

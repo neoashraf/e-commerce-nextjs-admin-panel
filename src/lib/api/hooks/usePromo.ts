@@ -2,14 +2,15 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import { couponListSchema, couponDetailSchema, createCouponResultSchema, type CouponRow, type CouponDetail } from "@/lib/api/schemas/promo";
+import { couponPageSchema, couponDetailSchema, createCouponResultSchema, type CouponPage, type CouponDetail } from "@/lib/api/schemas/promo";
 
 /** Admin coupon hooks (promo-coupons-fe). */
 export function useCoupons(params: Record<string, string | number | boolean | undefined>) {
   const qs = JSON.stringify(params);
   return useQuery({
     queryKey: ["admin-coupons", qs] as const,
-    queryFn: (): Promise<CouponRow[]> => api.get("/admin/coupons", { schema: couponListSchema, params }) as Promise<CouponRow[]>,
+    // rawEnvelope so the list view can read meta.total for pagination.
+    queryFn: (): Promise<CouponPage> => api.get("/admin/coupons", { schema: couponPageSchema, params, rawEnvelope: true }) as Promise<CouponPage>,
     staleTime: 20_000,
   });
 }

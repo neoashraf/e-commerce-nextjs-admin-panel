@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { paginated } from "@/lib/api/schemas/pagination";
 
 /** Admin leads inbox hooks + schemas (lead-inbox-fe). */
 export const leadRowSchema = z.object({
@@ -17,6 +18,9 @@ export const leadRowSchema = z.object({
 });
 export type LeadRow = z.infer<typeof leadRowSchema>;
 const leadListSchema = z.array(leadRowSchema);
+/** Paginated envelope for GET /admin/leads (rawEnvelope: { data, meta }). */
+const leadPageSchema = paginated(leadListSchema);
+export type LeadPage = z.infer<typeof leadPageSchema>;
 
 const leadMessageSchema = z.object({ direction: z.string(), body: z.string(), created_at: z.string(), internal: z.boolean().optional() });
 export const leadAttachmentSchema = z.object({
@@ -52,7 +56,8 @@ export function useAdminLeads(params: Record<string, string | number | boolean |
   const qs = JSON.stringify(params);
   return useQuery({
     queryKey: ["admin-leads", qs] as const,
-    queryFn: (): Promise<LeadRow[]> => api.get("/admin/leads", { schema: leadListSchema, params }) as Promise<LeadRow[]>,
+    // rawEnvelope so the inbox can read meta.total for pagination.
+    queryFn: (): Promise<LeadPage> => api.get("/admin/leads", { schema: leadPageSchema, params, rawEnvelope: true }) as Promise<LeadPage>,
     staleTime: 15_000,
   });
 }

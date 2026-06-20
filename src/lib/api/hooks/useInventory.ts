@@ -8,8 +8,12 @@ import {
   stockMutationResultSchema,
   type StockListParams,
   type StockMutationResult,
-  type StockRow,
 } from "@/lib/api/schemas/inventory";
+import { paginated } from "@/lib/api/schemas/pagination";
+
+/** Paginated envelope for GET /admin/inventory ({ data, meta }) — meta.total drives the footer. */
+const stockPageSchema = paginated(stockListSchema);
+export type StockPage = z.infer<typeof stockPageSchema>;
 
 // ---- Movement ledger (inv-movements-fe) ----
 export const movementSchema = z.object({
@@ -72,11 +76,13 @@ export function useInventory(params: StockListParams) {
   };
   return useQuery({
     queryKey: [...INVENTORY_KEY, qs] as const,
-    queryFn: (): Promise<StockRow[]> =>
+    // rawEnvelope so the list can read meta.total for the pagination footer.
+    queryFn: (): Promise<StockPage> =>
       api.get("/admin/inventory", {
-        schema: stockListSchema,
+        schema: stockPageSchema,
         params: queryParams,
-      }) as Promise<StockRow[]>,
+        rawEnvelope: true,
+      }) as Promise<StockPage>,
     staleTime: 15_000,
     retry: (count, err) => !(err as { isClientError?: boolean })?.isClientError && count < 2,
   });

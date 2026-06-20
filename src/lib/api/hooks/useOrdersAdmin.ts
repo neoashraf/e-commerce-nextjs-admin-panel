@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { paginated } from "@/lib/api/schemas/pagination";
 
 /** Admin orders hooks + schemas (ord-admin-fe). */
 export const orderRowSchema = z.object({
@@ -16,6 +17,9 @@ export const orderRowSchema = z.object({
 });
 export type OrderRow = z.infer<typeof orderRowSchema>;
 const orderListSchema = z.array(orderRowSchema);
+/** Paginated envelope for GET /admin/orders ({ data, meta }) — meta.total drives Next (not displayed). */
+const orderPageSchema = paginated(orderListSchema);
+export type OrderPage = z.infer<typeof orderPageSchema>;
 
 export const adminOrderDetailSchema = z.object({
   order_no: z.string(),
@@ -36,7 +40,9 @@ export function useAdminOrders(params: Record<string, string | number | boolean 
   const qs = JSON.stringify(params);
   return useQuery({
     queryKey: ["admin-orders", qs] as const,
-    queryFn: (): Promise<OrderRow[]> => api.get("/admin/orders", { schema: orderListSchema, params }) as Promise<OrderRow[]>,
+    // rawEnvelope so the list can read meta.total for the pager (Next disabled on the last page).
+    queryFn: (): Promise<OrderPage> =>
+      api.get("/admin/orders", { schema: orderPageSchema, params, rawEnvelope: true }) as Promise<OrderPage>,
     staleTime: 15_000,
   });
 }

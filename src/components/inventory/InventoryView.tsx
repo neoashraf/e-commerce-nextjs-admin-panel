@@ -7,7 +7,7 @@ import { PackageX, Upload, WifiOff } from "lucide-react";
 import { useInventory } from "@/lib/api/hooks/useInventory";
 import type { StockRow, StockStatus } from "@/lib/api/schemas/inventory";
 import { Can } from "@/lib/permissions/Can";
-import { Button, Card, EmptyState, ErrorState, SkeletonRows } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorState, SkeletonRows, TablePagination } from "@/components/ui";
 import { StockFilters } from "@/app/(admin)/admin/inventory/_components/StockFilters";
 import { StockTable } from "@/app/(admin)/admin/inventory/_components/StockTable";
 import { StockCard } from "@/app/(admin)/admin/inventory/_components/StockCard";
@@ -72,8 +72,12 @@ export function InventoryView() {
   });
 
   const hasFilters = q !== "" || status !== "";
-  const rows = useMemo(() => (data && sort ? sortRows(data, sort, dir) : (data ?? [])), [data, sort, dir]);
-  const resultLabel = data ? `${data.length} SKU${data.length === 1 ? "" : "s"}` : undefined;
+  const total = data?.meta.total ?? 0;
+  const rows = useMemo(() => {
+    const base = data?.data ?? [];
+    return sort ? sortRows(base, sort, dir) : base;
+  }, [data, sort, dir]);
+  const resultLabel = data ? `${total} SKU${total === 1 ? "" : "s"}` : undefined;
 
   function patchQuery(patch: Record<string, string | undefined>) {
     const next = new URLSearchParams(sp.toString());
@@ -129,7 +133,7 @@ export function InventoryView() {
         <Card className="p-0">
           <ErrorState description="Couldn't load stock." onRetry={() => refetch()} />
         </Card>
-      ) : !data || data.length === 0 ? (
+      ) : !data || data.data.length === 0 ? (
         <Card className="p-0">
           {hasFilters ? (
             <EmptyState
@@ -156,15 +160,27 @@ export function InventoryView() {
           )}
         </Card>
       ) : (
-        <div aria-busy={isFetching}>
-          <StockTable
-            rows={rows}
-            sort={sort}
-            dir={dir}
-            onSort={onSort}
-            onSetAdjust={setStockTarget}
-            onEditThreshold={setThresholdTarget}
-          />
+        <div aria-busy={isFetching} className="space-y-3">
+          {/* Desktop: card-wrapped table + pagination footer (design Stock (INV) §D). */}
+          <Card className="hidden overflow-hidden p-0 lg:block">
+            <div className="overflow-x-auto">
+              <StockTable
+                rows={rows}
+                sort={sort}
+                dir={dir}
+                onSort={onSort}
+                onSetAdjust={setStockTarget}
+                onEditThreshold={setThresholdTarget}
+              />
+            </div>
+            <TablePagination
+              page={page}
+              pageSize={limit}
+              total={total}
+              onPageChange={(p) => patchQuery({ page: String(p) })}
+            />
+          </Card>
+          {/* Mobile: stacked cards + pagination. */}
           <div className="space-y-3 lg:hidden">
             {rows.map((r) => (
               <StockCard
@@ -174,6 +190,14 @@ export function InventoryView() {
                 onEditThreshold={setThresholdTarget}
               />
             ))}
+            <Card className="p-0">
+              <TablePagination
+                page={page}
+                pageSize={limit}
+                total={total}
+                onPageChange={(p) => patchQuery({ page: String(p) })}
+              />
+            </Card>
           </div>
         </div>
       )}

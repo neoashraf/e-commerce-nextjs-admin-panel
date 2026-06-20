@@ -19,7 +19,7 @@ const EXPORT_PERMISSION = "reports.report.export";
 export function OrdersExportButton({
   filters,
 }: {
-  filters: { q?: string; status?: string; payment_state?: string };
+  filters: { q?: string; status?: string; payment_state?: string; from?: string; to?: string };
 }) {
   const create = useCreateExport();
   const [exportId, setExportId] = useState<string | null>(null);
@@ -30,6 +30,8 @@ export function OrdersExportButton({
     if (filters.q) params.q = filters.q;
     if (filters.status) params.status = filters.status;
     if (filters.payment_state) params.payment_state = filters.payment_state;
+    if (filters.from) params.from = filters.from;
+    if (filters.to) params.to = filters.to;
     create.mutate(
       { report_key: "orders_list", params, format },
       { onSuccess: (r) => setExportId(r.export_id) },

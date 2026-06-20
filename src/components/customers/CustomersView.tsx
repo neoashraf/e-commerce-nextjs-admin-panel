@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Calendar, Download, Search, UserRound, Users } from "lucide-react";
-import { useCustomers, type CustomerRow } from "@/lib/api/hooks/useCustomers";
+import { useCustomers, customerRowSchema, type CustomerRow } from "@/lib/api/hooks/useCustomers";
+import { fetchAllRows, buildCsv, downloadCsv, todayStamp } from "@/lib/exportCsv";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { formatBDT, formatDate } from "@/lib/format";
@@ -87,10 +89,6 @@ const EXPORT_FIELD_VALUE: Record<string, (c: CustomerRow) => string> = {
   "Customer ID": (c) => c.id,
 };
 
-function csvCell(v: string): string {
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-}
-
 function initials(name: string): string {
   const t = name.trim();
   if (!t) return "?";
@@ -137,28 +135,46 @@ export function CustomersView() {
     router.push(`${pathname}?${next.toString()}`);
   }
 
-  /** Client-side CSV of the current filtered view (honours the modal's field selection). */
-  function confirmExport(fields: string[]) {
+  const [exporting, setExporting] = useState(false);
+
+  /**
+   * Client-side CSV (honours the modal's field selection). Fetches EVERY page of the current filtered
+   * view — not just the loaded list page — then serializes + downloads in the browser. Replaces the
+   * async export pipeline so the file is produced reliably without a backend job.
+   */
+  async function confirmExport(fields: string[]) {
     setExportOpen(false);
     const cols = fields.filter((f) => EXPORT_FIELD_VALUE[f]);
-    if (cols.length === 0 || rows.length === 0) {
-      toast("Nothing to export for the current filter.", "info");
+    if (cols.length === 0) {
+      toast("Select at least one field to export.", "info");
       return;
     }
-    const csv = [
-      cols.join(","),
-      ...rows.map((c) => cols.map((f) => csvCell(EXPORT_FIELD_VALUE[f](c))).join(",")),
-    ].join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast(`Exported ${rows.length} customer${rows.length === 1 ? "" : "s"} to CSV.`);
+    setExporting(true);
+    try {
+      const all = await fetchAllRows(
+        "/admin/customers",
+        {
+          q: q || undefined,
+          status: status || undefined,
+          ...activityParams(activity),
+          registration_from: ddmmyyyyToIso(registeredFrom),
+          registration_to: ddmmyyyyToIso(registeredTo),
+          include_guests: includeGuests ? "true" : undefined,
+        },
+        z.array(customerRowSchema),
+      );
+      if (all.length === 0) {
+        toast("Nothing to export for the current filter.", "info");
+        return;
+      }
+      const csv = buildCsv(cols, all.map((c) => cols.map((f) => EXPORT_FIELD_VALUE[f](c))));
+      downloadCsv(`customers-${todayStamp()}.csv`, csv);
+      toast(`Exported ${all.length} customer${all.length === 1 ? "" : "s"} to CSV.`);
+    } catch {
+      toast("Export failed. Try again.", "error");
+    } finally {
+      setExporting(false);
+    }
   }
 
   const resultCount = rows.length;
@@ -192,8 +208,9 @@ export function CustomersView() {
             size="md"
             leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
             onClick={() => setExportOpen(true)}
+            disabled={exporting}
           >
-            Export
+            {exporting ? "Exporting…" : "Export"}
           </Button>
         </Can>
       </div>

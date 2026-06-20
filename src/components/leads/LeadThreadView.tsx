@@ -17,8 +17,11 @@ import { formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/stores/toast";
 import { LeadClaimHandoff } from "@/components/leads/LeadClaimHandoff";
 
-/** Lead types eligible for a claim → Orders exchange handoff (FR-LEAD-016). */
+/* TEMP (commented out per request, 2026-06-20): "Process exchange in Orders"
+   handoff. Re-enable by uncommenting this const and the button block below.
+// Lead types eligible for a claim → Orders exchange handoff (FR-LEAD-016).
 const HANDOFF_TYPES = ["claim_return", "order_issue"];
+*/
 
 const STATUS_OPTIONS = ["open", "awaiting_customer", "resolved", "closed", "spam"] as const;
 
@@ -55,6 +58,7 @@ export function LeadThreadView({ reference }: { reference: string }) {
         <Can permission="leads.lead.assign">
           <AssigneePicker reference={reference} current={data.assigned_admin_id ?? null} />
         </Can>
+        {/* TEMP (commented out per request, 2026-06-20): "Process exchange in Orders" button.
         {HANDOFF_TYPES.includes(data.type) && (
           <Can allOf={["leads.lead.respond", "orders.exchange.review"]}>
             <button
@@ -66,6 +70,7 @@ export function LeadThreadView({ reference }: { reference: string }) {
             </button>
           </Can>
         )}
+        */}
       </div>
 
       {showHandoff && (

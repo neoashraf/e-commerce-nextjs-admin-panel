@@ -20,6 +20,7 @@ export {
   TablePagination,
 } from "./Table";
 export type { SortDir } from "./Table";
+export { RowActions } from "./RowActions";
 export { Input } from "./Input";
 export type { InputProps } from "./Input";
 export { Select } from "./Select";

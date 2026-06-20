@@ -2,6 +2,7 @@
 
 import { useSearchReport } from "@/lib/api/hooks/reports";
 import { BarBreakdownChart } from "@/components/charts";
+import { ChartCard } from "@/components/ui";
 import type { ReportMeta } from "./catalog";
 import { useReportParams } from "./ReportControls";
 import { Column, DataTable, ReportState, Section } from "./primitives";
@@ -37,9 +38,11 @@ export function SearchReport({ meta }: { meta: ReportMeta }) {
     >
       <div className="space-y-6">
         {chartData.length > 0 && (
-          <Section title={isZero ? "Zero-result queries" : "Popular queries"}>
-            <BarBreakdownChart data={chartData} valueLabel="Occurrences" />
-          </Section>
+          // ChartCard (like the Products/Sales charts) gives the chart a padded,
+          // centered card frame instead of sitting flush on the canvas.
+          <ChartCard title={isZero ? "Zero-result queries" : "Popular queries"}>
+            <BarBreakdownChart data={chartData} valueLabel="Occurrences" horizontal />
+          </ChartCard>
         )}
         <Section title={isZero ? "Zero results" : "Popular searches"}>
           <DataTable

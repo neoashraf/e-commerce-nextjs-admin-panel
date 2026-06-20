@@ -60,8 +60,8 @@ export function ExportButton({ meta }: { meta: ReportMeta }) {
 
   return (
     <Can permission={REPORTS_EXPORT_PERMISSION}>
-      <div className="flex flex-col items-end gap-1">
-        <div className="flex gap-2">
+      <div className="flex flex-col items-start gap-1 sm:items-end">
+        <div className="flex flex-wrap gap-2">
           {showCsv && (
             <Button
               variant="primary"

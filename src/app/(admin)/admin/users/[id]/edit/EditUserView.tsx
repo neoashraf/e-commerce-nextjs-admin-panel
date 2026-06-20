@@ -10,7 +10,9 @@ import { InviteEditForm } from "@/components/admin-users/InviteEditForm";
  * edit mode. Loading / not-found handled.
  */
 export function EditUserView({ id }: { id: string }) {
-  const { data, isLoading, isError } = useAdminUsers({ include_deleted: true, page: 1, limit: 200 });
+  // The list endpoint caps limit at 100; admins are few (≤50) and sorted newest-first,
+  // so the target (incl. a just-invited admin) is always within the first page.
+  const { data, isLoading, isError } = useAdminUsers({ include_deleted: true, page: 1, limit: 100 });
 
   if (isLoading) return <div className="h-64 animate-pulse rounded-lg bg-gray-100" />;
   const user = data?.data.find((u) => u.id === id);

@@ -19,11 +19,9 @@ const EXPORT_FIELDS = [
   "Phone",
   "Email",
   "Status",
-  "Tags",
   "Orders",
   "Total spent",
   "Last order",
-  "Registration date",
   "Customer ID",
 ] as const;
 
@@ -32,11 +30,9 @@ const DEFAULT_SELECTED: Record<string, boolean> = {
   Phone: true,
   Email: true,
   Status: true,
-  Tags: true,
   Orders: true,
   "Total spent": true,
   "Last order": true,
-  "Registration date": false,
   "Customer ID": false,
 };
 
@@ -50,7 +46,7 @@ export function CustomerExportModal({
   /** The current filtered count to surface in the "current filter applies" note. */
   resultCount: number | null;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (fields: string[]) => void;
 }) {
   const [selected, setSelected] = useState<Record<string, boolean>>(DEFAULT_SELECTED);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -167,7 +163,7 @@ export function CustomerExportModal({
               variant="primary"
               size="sm"
               leadingIcon={<Download className="h-3.5 w-3.5" aria-hidden="true" />}
-              onClick={onConfirm}
+              onClick={() => onConfirm(EXPORT_FIELDS.filter((f) => selected[f]))}
             >
               Export CSV
             </Button>

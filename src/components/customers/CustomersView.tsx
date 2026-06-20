@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Calendar, Check, Download, Search, UserRound, Users } from "lucide-react";
+import { Calendar, Download, Search, UserRound, Users } from "lucide-react";
 import { useCustomers, type CustomerRow } from "@/lib/api/hooks/useCustomers";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
@@ -26,24 +26,14 @@ import {
   THead,
   TR,
 } from "@/components/ui";
-import { CustomerBulkTagBar } from "./CustomerBulkTagBar";
 import { CustomerExportModal } from "./CustomerExportModal";
-import { CustomerRowMenu } from "./CustomerRowMenu";
-import {
-  CUSTOMERS_EXPORT_PERMISSION,
-  CUSTOMERS_READ_PERMISSION,
-  CUSTOMERS_TAG_PERMISSION,
-} from "./permissions";
+import { CUSTOMERS_EXPORT_PERMISSION, CUSTOMERS_READ_PERMISSION } from "./permissions";
 
 /**
- * Customers directory (CUST) — the LIST archetype on the Commerce Admin design
- * system: page header + Export, a URL-reflected filter toolbar, the AD0 `Table`
- * with select-all + guest markers + semantic status pills + tag chips + tabular
- * ৳ aggregates, a bulk-tag bar on selection (gated on `customers.tag.manage`),
- * and the four async states. Presentation only — the `useCustomers` hook, its
- * data shape, and every permission gate are reused unchanged.
- *
- * Pixel target: docs/design/admin-panel-design-files/Customers (CUST).dc.html.
+ * Customers directory (CUST) — LIST archetype on the Commerce Admin design system.
+ * Tag feature is intentionally omitted (per product). Filters are mapped to the backend
+ * query contract (has_orders / last_order_from-to / registration_from-to / include_guests)
+ * and URL-reflected. Export is a client-side CSV of the current filtered view.
  */
 
 const STATUS_LABEL: Record<string, string> = {
@@ -53,19 +43,52 @@ const STATUS_LABEL: Record<string, string> = {
   deleted: "Deleted",
 };
 
-/** Quiet, neutral/accent tag chips — color carries no extra meaning (design §8.7). */
-const TAG_STYLE: Record<string, { bg: string; fg: string; dot: string }> = {
-  VIP: { bg: "#FEF3C7", fg: "#92400E", dot: "#D97706" },
-  Wholesale: { bg: "var(--accent-50)", fg: "var(--accent-700)", dot: "var(--accent-600)" },
-  Repeat: { bg: "#F0FDF4", fg: "#15803D", dot: "#16A34A" },
-  Newsletter: { bg: "#F1F5F9", fg: "#475569", dot: "#94A3B8" },
-  Football: { bg: "#ECFEFF", fg: "#0E7490", dot: "#06B6D4" },
-  Cricket: { bg: "#F5F3FF", fg: "#6D28D9", dot: "#8B5CF6" },
-};
-const TAG_FALLBACK = { bg: "#F1F5F9", fg: "#475569", dot: "#94A3B8" };
+/** DD/MM/YYYY (toolbar input) → ISO YYYY-MM-DD for the API; undefined if blank/invalid (so no 400). */
+function ddmmyyyyToIso(v: string): string | undefined {
+  const m = v.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return undefined;
+  const [, d, mo, y] = m;
+  return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
 
-function rowKey(c: CustomerRow, i: number): string {
-  return c.id || `${c.phone ?? ""}-${c.email ?? ""}-${i}`;
+function isoDaysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Map the activity dropdown to the backend's order-activity params (fixes the 400). */
+function activityParams(a: string): Record<string, string> {
+  switch (a) {
+    case "has_orders":
+      return { has_orders: "true" };
+    case "no_orders":
+      return { has_orders: "false" };
+    case "last_30d":
+      return { last_order_from: isoDaysAgo(30) };
+    case "last_90d":
+      return { last_order_from: isoDaysAgo(90) };
+    case "last_1y":
+      return { last_order_to: isoDaysAgo(365) };
+    default:
+      return {};
+  }
+}
+
+/** Exportable columns (label → cell value) for the client-side CSV. */
+const EXPORT_FIELD_VALUE: Record<string, (c: CustomerRow) => string> = {
+  Name: (c) => c.name ?? "",
+  Phone: (c) => c.phone ?? "",
+  Email: (c) => c.email ?? "",
+  Status: (c) => STATUS_LABEL[c.status] ?? c.status,
+  Orders: (c) => String(c.order_count ?? 0),
+  "Total spent": (c) => c.total_spent ?? "",
+  "Last order": (c) => c.last_order_at ?? "",
+  "Customer ID": (c) => c.id,
+};
+
+function csvCell(v: string): string {
+  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
 function initials(name: string): string {
@@ -80,90 +103,31 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-function TagChip({ tag }: { tag: string }) {
-  const s = TAG_STYLE[tag] ?? TAG_FALLBACK;
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-[11px] font-semibold"
-      style={{ backgroundColor: s.bg, color: s.fg }}
-    >
-      <span
-        className="h-[5px] w-[5px] flex-shrink-0 rounded-full"
-        style={{ backgroundColor: s.dot }}
-        aria-hidden="true"
-      />
-      {tag}
-    </span>
-  );
-}
-
-/** Square checkbox matching the design (accent fill + check when on). */
-function CheckBox({
-  checked,
-  indeterminate = false,
-  label,
-  onToggle,
-}: {
-  checked: boolean;
-  indeterminate?: boolean;
-  label: string;
-  onToggle: () => void;
-}) {
-  const on = checked || indeterminate;
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={indeterminate ? "mixed" : checked}
-      aria-label={label}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      className={cn(
-        "flex h-[18px] w-[18px] items-center justify-center rounded-sm border-[1.5px] text-accent-fg",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1",
-        on ? "border-accent-600 bg-accent-600" : "border-border-strong bg-surface",
-      )}
-    >
-      {checked && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
-      {!checked && indeterminate && <span className="h-0.5 w-2.5 rounded-full bg-accent-fg" />}
-    </button>
-  );
-}
-
 export function CustomersView() {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
   const { can, ready } = usePermissions();
 
-  // URL-reflected filters (same params the hook already consumed, kept verbatim).
   const status = sp.get("status") ?? "";
   const q = sp.get("q") ?? "";
-  const tag = sp.get("tag") ?? "";
   const activity = sp.get("activity") ?? "";
   const registeredFrom = sp.get("registered_from") ?? "";
   const registeredTo = sp.get("registered_to") ?? "";
   const includeGuests = sp.get("include_guests") === "1";
 
-  // Data layer untouched — same hook, same shape. Extra filter params are passed
-  // through transparently (the hook forwards an arbitrary param record).
   const { data, isLoading, isError, refetch } = useCustomers({
     q: q || undefined,
     status: status || undefined,
-    tag: tag || undefined,
-    activity: activity || undefined,
-    registered_from: registeredFrom || undefined,
-    registered_to: registeredTo || undefined,
-    include_guests: includeGuests || undefined,
+    ...activityParams(activity),
+    registration_from: ddmmyyyyToIso(registeredFrom),
+    registration_to: ddmmyyyyToIso(registeredTo),
+    include_guests: includeGuests ? "true" : undefined,
     page: 1,
-    limit: 50,
+    limit: 200,
   });
 
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [exportOpen, setExportOpen] = useState(false);
-
   const rows = useMemo(() => data ?? [], [data]);
 
   function setParam(key: string, value: string) {
@@ -173,54 +137,33 @@ export function CustomersView() {
     router.push(`${pathname}?${next.toString()}`);
   }
 
-  // Selection — only non-guest rows are selectable (guests are read-only).
-  const selectableIds = useMemo(
-    () => rows.filter((c) => !c.is_guest && c.id).map((c) => c.id),
-    [rows],
-  );
-  const selectedCount = selectableIds.filter((id) => selected[id]).length;
-  const allChecked = selectableIds.length > 0 && selectedCount === selectableIds.length;
-  const someChecked = selectedCount > 0 && !allChecked;
-
-  function toggleAll() {
-    setSelected((s) => {
-      if (selectableIds.every((id) => s[id])) {
-        const next = { ...s };
-        selectableIds.forEach((id) => delete next[id]);
-        return next;
-      }
-      const next = { ...s };
-      selectableIds.forEach((id) => (next[id] = true));
-      return next;
-    });
-  }
-  function toggleOne(id: string) {
-    setSelected((s) => {
-      const next = { ...s };
-      if (next[id]) delete next[id];
-      else next[id] = true;
-      return next;
-    });
-  }
-
-  // Bulk-tag apply — presentation only (no tag-assign mutation hook exists yet).
-  // TODO(design): wire to a real assign-tag mutation when the hook is added.
-  function applyTag(t: string, count = selectedCount) {
-    toast(`Tagged ${count} customer${count === 1 ? "" : "s"} with "${t}".`);
-  }
-
-  // Export — presentation only (no customers export mutation hook exists yet).
-  // TODO(design): wire to a real export mutation when the hook is added.
-  function confirmExport() {
+  /** Client-side CSV of the current filtered view (honours the modal's field selection). */
+  function confirmExport(fields: string[]) {
     setExportOpen(false);
-    toast("Export is processing — we'll notify you.", "info");
+    const cols = fields.filter((f) => EXPORT_FIELD_VALUE[f]);
+    if (cols.length === 0 || rows.length === 0) {
+      toast("Nothing to export for the current filter.", "info");
+      return;
+    }
+    const csv = [
+      cols.join(","),
+      ...rows.map((c) => cols.map((f) => csvCell(EXPORT_FIELD_VALUE[f](c))).join(",")),
+    ].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${rows.length} customer${rows.length === 1 ? "" : "s"} to CSV.`);
   }
 
-  const canTag = can(CUSTOMERS_TAG_PERMISSION);
   const resultCount = rows.length;
-  const hasFilters = !!(q || status || tag || activity || registeredFrom || registeredTo);
+  const hasFilters = !!(q || status || activity || registeredFrom || registeredTo);
 
-  // Screen is hidden for admins without customers.customer.read.
   if (ready && !can(CUSTOMERS_READ_PERMISSION)) {
     return (
       <Card className="p-0">
@@ -284,23 +227,7 @@ export function CustomersView() {
           </Select>
         </div>
 
-        <div className="w-36">
-          <Select
-            aria-label="Filter by tag"
-            value={tag}
-            onChange={(e) => setParam("tag", e.target.value)}
-          >
-            <option value="">All tags</option>
-            <option value="VIP">VIP</option>
-            <option value="Wholesale">Wholesale</option>
-            <option value="Repeat">Repeat</option>
-            <option value="Newsletter">Newsletter</option>
-            <option value="Football">Football</option>
-            <option value="Cricket">Cricket</option>
-          </Select>
-        </div>
-
-        {/* Registration date-range */}
+        {/* Registration date-range (DD/MM/YYYY) */}
         <div className="flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5">
           <Calendar className="h-[15px] w-[15px] flex-shrink-0 text-text-faint" aria-hidden="true" />
           <input
@@ -383,17 +310,8 @@ export function CustomersView() {
         </span>
       </div>
 
-      {/* ===== C/D/E. TABLE CARD (bulk bar + table + pagination) ===== */}
+      {/* ===== TABLE CARD ===== */}
       <Card className="overflow-hidden p-0">
-        {/* D. Bulk-tag bar — gated on customers.tag.manage */}
-        {canTag && selectedCount > 0 && (
-          <CustomerBulkTagBar
-            selectedCount={selectedCount}
-            onApplyTag={(t) => applyTag(t)}
-            onClear={() => setSelected({})}
-          />
-        )}
-
         {isLoading ? (
           <SkeletonRows rows={8} cols={6} />
         ) : isError ? (
@@ -407,63 +325,31 @@ export function CustomersView() {
             }
           />
         ) : (
-          <>
-            <Table className="min-w-[1040px]">
-              <caption className="sr-only">Customers. {resultCount} customers total.</caption>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[860px]">
+              <caption className="sr-only">Customers. {resultCount} shown.</caption>
               <THead>
                 <TR hover={false}>
-                  <TH className="w-12">
-                    {canTag ? (
-                      <CheckBox
-                        checked={allChecked}
-                        indeterminate={someChecked}
-                        label="Select all customers"
-                        onToggle={toggleAll}
-                      />
-                    ) : (
-                      <span className="sr-only">Select</span>
-                    )}
-                  </TH>
                   <TH>Name</TH>
                   <TH>Phone</TH>
                   <TH>Email</TH>
                   <TH>Status</TH>
-                  <TH>Tags</TH>
                   <TH numeric>Orders</TH>
                   <TH numeric>Total spent</TH>
                   <TH>Last order</TH>
-                  <TH className="w-14">
-                    <span className="sr-only">Actions</span>
-                  </TH>
                 </TR>
               </THead>
               <TBody>
                 {rows.map((c, i) => {
-                  const key = rowKey(c, i);
                   const name = c.name ?? c.phone ?? c.email ?? "Guest";
                   const isGuest = !!c.is_guest;
-                  const checked = !!(c.id && selected[c.id]);
-                  const shownTags = c.tags.slice(0, 2);
-                  const overflow = c.tags.length - shownTags.length;
                   const orders = c.order_count ?? 0;
                   return (
                     <TR
-                      key={key}
-                      className={cn("cursor-pointer", checked && "bg-accent-50")}
+                      key={c.id || `${c.phone ?? ""}-${c.email ?? ""}-${i}`}
+                      className={cn(c.id && "cursor-pointer")}
                       onClick={() => c.id && router.push(`/admin/customers/${c.id}`)}
                     >
-                      {/* select */}
-                      <TD onClick={(e) => e.stopPropagation()}>
-                        {canTag && !isGuest && c.id ? (
-                          <CheckBox
-                            checked={checked}
-                            label={`Select ${name}`}
-                            onToggle={() => toggleOne(c.id)}
-                          />
-                        ) : null}
-                      </TD>
-
-                      {/* NAME (+ guest marker) */}
                       <TD className="max-w-[230px]">
                         <div className="flex items-center gap-2.5">
                           <span
@@ -478,9 +364,7 @@ export function CustomersView() {
                             {initials(name)}
                           </span>
                           <div className="min-w-0">
-                            <div className="truncate text-[13px] font-semibold text-text">
-                              {name}
-                            </div>
+                            <div className="truncate text-[13px] font-semibold text-text">{name}</div>
                             {isGuest && (
                               <span className="mt-0.5 inline-flex items-center gap-1 rounded-sm bg-surface-subtle px-1.5 py-px text-[10.5px] font-semibold text-text-muted">
                                 <UserRound className="h-2.5 w-2.5" aria-hidden="true" />
@@ -490,54 +374,23 @@ export function CustomersView() {
                           </div>
                         </div>
                       </TD>
-
-                      {/* PHONE */}
                       <TD className="whitespace-nowrap tabular-nums text-[12.5px]">
                         {c.phone ?? "—"}
                       </TD>
-
-                      {/* EMAIL */}
                       <TD className="max-w-[200px]">
                         <span className="block truncate text-[12.5px] text-text-muted">
                           {c.email ?? "—"}
                         </span>
                       </TD>
-
-                      {/* STATUS */}
                       <TD>
-                        <StatusPill
-                          status={c.status}
-                          label={STATUS_LABEL[c.status] ?? undefined}
-                        />
+                        <StatusPill status={c.status} label={STATUS_LABEL[c.status] ?? undefined} />
                       </TD>
-
-                      {/* TAGS */}
-                      <TD className="max-w-[180px]">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          {shownTags.length === 0 ? (
-                            <span className="text-text-faint">—</span>
-                          ) : (
-                            shownTags.map((t) => <TagChip key={t} tag={t} />)
-                          )}
-                          {overflow > 0 && (
-                            <span className="inline-flex items-center whitespace-nowrap rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[11px] font-semibold text-text-muted">
-                              +{overflow}
-                            </span>
-                          )}
-                        </div>
-                      </TD>
-
-                      {/* ORDERS */}
                       <TD numeric className="text-[13px] text-text-secondary">
                         {orders}
                       </TD>
-
-                      {/* TOTAL SPENT */}
                       <TD numeric className="whitespace-nowrap text-[13px] font-semibold text-text">
                         {c.total_spent ? formatBDT(Number(c.total_spent)) : "—"}
                       </TD>
-
-                      {/* LAST ORDER */}
                       <TD
                         className={cn(
                           "whitespace-nowrap tabular-nums text-[12.5px]",
@@ -546,29 +399,12 @@ export function CustomersView() {
                       >
                         {c.last_order_at ? formatDate(c.last_order_at) : "—"}
                       </TD>
-
-                      {/* ROW MENU */}
-                      <TD className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <CustomerRowMenu
-                          id={c.id}
-                          name={name}
-                          isGuest={isGuest}
-                          onAddTag={() => applyTag("VIP", 1)}
-                        />
-                      </TD>
                     </TR>
                   );
                 })}
               </TBody>
             </Table>
-
-            {/* E. Pagination footer */}
-            <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3 text-[12.5px] text-text-muted">
-              <span className="tabular-nums">
-                Showing 1–{resultCount} of {resultCount}
-              </span>
-            </div>
-          </>
+          </div>
         )}
       </Card>
 

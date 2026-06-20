@@ -11,20 +11,18 @@ import {
   LifeBuoy,
   Lock,
   MapPin,
-  Plus,
   ShoppingBag,
   ShoppingCart,
-  SquarePen,
-  StickyNote,
   TrendingUp,
   User,
   UserCheck,
   UserX,
 } from "lucide-react";
-import { useCustomer, useAddNote, useCustomerStatus } from "@/lib/api/hooks/useCustomers";
+import { useCustomer, useCustomerStatus } from "@/lib/api/hooks/useCustomers";
+import { useAdminOrders } from "@/lib/api/hooks/useOrdersAdmin";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import { formatBDT, formatDate, formatDateTime } from "@/lib/format";
+import { formatBDT, formatDate } from "@/lib/format";
 import { toast } from "@/lib/stores/toast";
 import { cn } from "@/lib/cn";
 import {
@@ -33,6 +31,7 @@ import {
   EmptyState,
   ErrorState,
   Skeleton,
+  SkeletonRows,
   StatCard,
   StatusPill,
   Table,
@@ -43,11 +42,11 @@ import {
   TR,
 } from "@/components/ui";
 import {
-  CUSTOMERS_NOTE_PERMISSION,
   CUSTOMERS_READ_PERMISSION,
   CUSTOMERS_SUSPEND_PERMISSION,
-  CUSTOMERS_TAG_PERMISSION,
 } from "./permissions";
+
+const PAGE_SIZE = 10;
 
 /**
  * Customer 360 profile (CUST) — the full-page DETAIL workspace on the Commerce
@@ -73,17 +72,6 @@ const STATUS_LABEL: Record<string, string> = {
   deleted: "Deleted",
 };
 
-/** Quiet, neutral/accent tag chips — color carries no extra meaning (design §8.7). */
-const TAG_STYLE: Record<string, { bg: string; fg: string; dot: string }> = {
-  VIP: { bg: "#FEF3C7", fg: "#92400E", dot: "#D97706" },
-  Wholesale: { bg: "var(--accent-50)", fg: "var(--accent-700)", dot: "var(--accent-600)" },
-  Repeat: { bg: "#F0FDF4", fg: "#15803D", dot: "#16A34A" },
-  Newsletter: { bg: "#F1F5F9", fg: "#475569", dot: "#94A3B8" },
-  Football: { bg: "#ECFEFF", fg: "#0E7490", dot: "#06B6D4" },
-  Cricket: { bg: "#F5F3FF", fg: "#6D28D9", dot: "#8B5CF6" },
-};
-const TAG_FALLBACK = { bg: "#F1F5F9", fg: "#475569", dot: "#94A3B8" };
-
 function initials(name: string): string {
   const t = name.trim();
   if (!t) return "?";
@@ -94,23 +82,6 @@ function initials(name: string): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
-}
-
-function TagChip({ tag }: { tag: string }) {
-  const s = TAG_STYLE[tag] ?? TAG_FALLBACK;
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-0.5 text-[11.5px] font-semibold"
-      style={{ backgroundColor: s.bg, color: s.fg }}
-    >
-      <span
-        className="h-[5px] w-[5px] flex-shrink-0 rounded-full"
-        style={{ backgroundColor: s.dot }}
-        aria-hidden="true"
-      />
-      {tag}
-    </span>
-  );
 }
 
 /** Section heading row used inside each panel card (icon + title + optional aside). */
@@ -139,14 +110,11 @@ function PanelHeader({
 
 export function CustomerDetailView({ id }: { id: string }) {
   const { data, isLoading, isError, refetch } = useCustomer(id);
-  const addNote = useAddNote(id);
   const statusM = useCustomerStatus(id);
   const { can, ready } = usePermissions();
 
-  const [note, setNote] = useState("");
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
-  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   // Screen is hidden for admins without customers.customer.read.
   if (ready && !can(CUSTOMERS_READ_PERMISSION)) {
@@ -220,22 +188,6 @@ export function CustomerDetailView({ id }: { id: string }) {
   // TODO(design): first-order date is shown in the design but not returned by the
   // customer 360 endpoint — omitted until the API exposes it.
 
-  function onAddNote() {
-    const body = note.trim();
-    if (!body) return;
-    addNote.mutate(body, {
-      onSuccess: () => {
-        setNote("");
-        toast("Note added.");
-      },
-      onError: () => toast("Couldn’t add the note. Try again.", "error"),
-    });
-  }
-
-  function focusNote() {
-    noteRef.current?.focus();
-  }
-
   function onSuspendClick() {
     if (isDeleted) {
       toast("Account actions aren't available for a deleted customer.", "info");
@@ -264,10 +216,6 @@ export function CustomerDetailView({ id }: { id: string }) {
       onError: () => toast("Couldn’t reactivate the account. Try again.", "error"),
     });
   }
-
-  const canManageTags = can(CUSTOMERS_TAG_PERMISSION);
-  const recentOrders = data.recent_orders ?? [];
-  const notes = data.notes ?? [];
 
   return (
     <div>
@@ -329,41 +277,12 @@ export function CustomerDetailView({ id }: { id: string }) {
                 )}
               </div>
 
-              {/* tag chips + add-tag */}
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                {data.tags.length > 0 ? (
-                  data.tags.map((t) => <TagChip key={t} tag={t} />)
-                ) : (
-                  <span className="text-[12px] text-text-faint">No tags</span>
-                )}
-                {!isGuest && canManageTags && (
-                  <button
-                    type="button"
-                    // TODO(design): wire to a real tag-assign mutation when added.
-                    onClick={() => toast("Tag picker opened.", "info")}
-                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-border-strong bg-surface px-2 py-0.5 text-[11.5px] font-semibold text-text-muted hover:bg-surface-subtle hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
-                  >
-                    <Plus className="h-3 w-3" aria-hidden="true" />
-                    Add tag
-                  </button>
-                )}
-              </div>
             </div>
           </div>
 
           {/* action cluster — guests have no account actions */}
           {!isGuest && (
             <div className="flex flex-shrink-0 flex-wrap items-center gap-2.5">
-              <Can permission={CUSTOMERS_NOTE_PERMISSION}>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  leadingIcon={<SquarePen className="h-4 w-4" aria-hidden="true" />}
-                  onClick={focusNote}
-                >
-                  Add note
-                </Button>
-              </Can>
               <Can permission={CUSTOMERS_SUSPEND_PERMISSION}>
                 {status === "suspended" || status === "locked" ? (
                   <Button
@@ -434,77 +353,67 @@ export function CustomerDetailView({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* (2) ORDER HISTORY */}
-          <Card className="overflow-hidden">
-            <div className="px-[18px] pb-3 pt-[15px]">
-              <PanelHeader
-                icon={ShoppingCart}
-                title="Order history"
-                count={`${orderCount} orders`}
-              />
-            </div>
-            {recentOrders.length === 0 ? (
+          {/* (2) ORDER HISTORY — paginated 10/page from the orders endpoint (by phone). */}
+          {data.phone ? (
+            <CustomerOrderHistory phone={data.phone} name={name} />
+          ) : (
+            <Card className="overflow-hidden">
+              <div className="px-[18px] pb-3 pt-[15px]">
+                <PanelHeader icon={ShoppingCart} title="Order history" />
+              </div>
               <EmptyState
                 icon={ShoppingCart}
                 title="No orders yet"
                 description="This customer hasn’t placed any orders."
                 className="py-10"
               />
+            </Card>
+          )}
+
+          {/* (3) LINKED LEADS */}
+          <Card className="p-[18px]">
+            <PanelHeader
+              icon={LifeBuoy}
+              title="Linked leads"
+              count={data.leads.length ? String(data.leads.length) : undefined}
+            />
+            {data.leads.length === 0 ? (
+              <p className="mt-3 text-[12.5px] text-text-muted">
+                No linked leads for this customer.
+              </p>
             ) : (
-              <Table>
-                <caption className="sr-only">Order history for {name}.</caption>
-                <THead>
-                  <TR hover={false}>
-                    <TH>Order</TH>
-                    <TH>Status</TH>
-                    <TH numeric>Total</TH>
-                    <TH>Date</TH>
-                  </TR>
-                </THead>
-                <TBody>
-                  {recentOrders.map((o) => (
-                    <TR key={o.order_no}>
-                      <TD>
-                        <Link
-                          href={`/admin/orders/${o.order_no}`}
-                          className="text-[13px] font-semibold tabular-nums text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
-                        >
-                          {o.order_no}
-                        </Link>
-                      </TD>
-                      <TD>{o.status ? <StatusPill status={o.status} /> : "—"}</TD>
-                      <TD numeric className="font-semibold text-text">
-                        {o.grand_total ? formatBDT(Number(o.grand_total)) : "—"}
-                      </TD>
-                      <TD className="whitespace-nowrap tabular-nums text-text-muted">
-                        {o.placed_at ? formatDate(o.placed_at) : "—"}
-                      </TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
+              <ul className="mt-3 flex flex-col gap-2">
+                {data.leads.map((l) => (
+                  <li key={l.reference}>
+                    <Link
+                      href={`/admin/leads/${l.reference}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface-hover px-3 py-2 hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+                    >
+                      <span className="flex items-center gap-2 text-[12.5px]">
+                        <span className="font-mono font-semibold text-accent-700">{l.reference}</span>
+                        {l.type && (
+                          <span className="text-text-muted">{l.type.replace(/_/g, " ")}</span>
+                        )}
+                      </span>
+                      {l.status && <StatusPill status={l.status} />}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             )}
           </Card>
 
-          {/* (3) LINKED LEADS */}
-          {/* TODO(design): linked leads aren't returned by the 360 endpoint yet;
-              the panel renders an empty state until the API exposes them. */}
+          {/* (4) WISHLIST — count only (no items endpoint exposed). */}
           <Card className="p-[18px]">
-            <PanelHeader icon={LifeBuoy} title="Linked leads" />
+            <PanelHeader
+              icon={Heart}
+              title="Wishlist"
+              count={`${data.wishlist_count ?? 0} item${(data.wishlist_count ?? 0) === 1 ? "" : "s"}`}
+            />
             <p className="mt-3 text-[12.5px] text-text-muted">
-              No linked leads for this customer.
-            </p>
-          </Card>
-
-          {/* (4) WISHLIST */}
-          {/* TODO(design): wishlist count isn't returned by the 360 endpoint yet;
-              shows a degraded panel (partial-source) while the rest renders. */}
-          <Card className="p-[18px]">
-            <div className="flex items-center justify-between gap-2.5">
-              <PanelHeader icon={Heart} title="Wishlist" />
-            </div>
-            <p className="mt-3 text-[12.5px] text-text-muted">
-              Wishlist details are currently unavailable.
+              {(data.wishlist_count ?? 0) === 0
+                ? "No items saved to the wishlist."
+                : `${data.wishlist_count} item${data.wishlist_count === 1 ? "" : "s"} saved to the wishlist.`}
             </p>
           </Card>
         </div>
@@ -529,70 +438,34 @@ export function CustomerDetailView({ id }: { id: string }) {
           </Card>
 
           {/* (6) ADDRESSES */}
-          {/* TODO(design): saved addresses aren't returned by the 360 endpoint yet;
-              the card renders an empty state until the API exposes them. */}
           <Card className="p-[18px]">
-            <PanelHeader icon={MapPin} title="Addresses" />
-            <p className="mt-3 text-[12.5px] text-text-muted">No saved addresses.</p>
-          </Card>
-
-          {/* (7) INTERNAL NOTES (append-only) */}
-          <Card className="p-[18px]">
-            <div className="mb-3.5">
-              <PanelHeader icon={StickyNote} title="Internal notes" />
-            </div>
-
-            {notes.length === 0 ? (
-              <p className="text-[12.5px] text-text-faint">No notes yet.</p>
+            <PanelHeader
+              icon={MapPin}
+              title="Addresses"
+              count={data.addresses.length ? String(data.addresses.length) : undefined}
+            />
+            {data.addresses.length === 0 ? (
+              <p className="mt-3 text-[12.5px] text-text-muted">No saved addresses.</p>
             ) : (
-              <ul className="flex flex-col gap-2.5">
-                {notes.map((n, i) => (
-                  <li
-                    key={n.id ?? i}
-                    className="rounded-lg border border-border bg-surface-hover p-3"
-                  >
-                    {n.created_at && (
-                      <p className="mb-1 text-[11px] tabular-nums text-text-faint">
-                        {formatDateTime(n.created_at)}
-                      </p>
-                    )}
-                    <p className="break-words text-[12.5px] leading-relaxed text-text-secondary">
-                      {n.body}
-                    </p>
+              <ul className="mt-3 flex flex-col gap-2.5">
+                {data.addresses.map((a, i) => (
+                  <li key={a.id ?? i} className="rounded-lg border border-border bg-surface-hover p-3">
+                    <p className="text-[12.5px] text-text-secondary">{a.address_line ?? "—"}</p>
+                    <div className="mt-1 flex items-center gap-2 text-[11.5px] text-text-faint">
+                      {a.district && <span>{a.district}</span>}
+                      {a.is_default && (
+                        <span className="rounded-sm bg-accent-50 px-1.5 py-px font-semibold text-accent-700">
+                          Default
+                        </span>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
-
-            <Can permission={CUSTOMERS_NOTE_PERMISSION}>
-              <div className="mt-3.5">
-                <textarea
-                  ref={noteRef}
-                  rows={2}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Add an internal note…"
-                  aria-label="Add an internal note"
-                  className="w-full resize-y rounded-md border border-border-strong bg-surface px-3 py-2 text-[13px] leading-snug text-text placeholder:text-text-faint focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
-                />
-                <div className="mt-2.5 flex items-center justify-between gap-2.5">
-                  <span className="text-[11.5px] text-text-faint">
-                    Never visible to the customer.
-                  </span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
-                    disabled={!note.trim()}
-                    loading={addNote.isPending}
-                    onClick={onAddNote}
-                  >
-                    Add note
-                  </Button>
-                </div>
-              </div>
-            </Can>
           </Card>
+
+          {/* Internal notes — removed per product. */}
         </div>
       </div>
 
@@ -612,6 +485,83 @@ export function CustomerDetailView({ id }: { id: string }) {
         }}
       />
     </div>
+  );
+}
+
+/** Order history — all of the customer's orders (matched by phone), paginated 10/page. */
+function CustomerOrderHistory({ phone, name }: { phone: string; name: string }) {
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError, refetch } = useAdminOrders({ phone, page, limit: PAGE_SIZE });
+  const orders = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
+  const hasNext = page * PAGE_SIZE < total;
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="px-[18px] pb-3 pt-[15px]">
+        <PanelHeader
+          icon={ShoppingCart}
+          title="Order history"
+          count={`${total} order${total === 1 ? "" : "s"}`}
+        />
+      </div>
+      {isLoading ? (
+        <SkeletonRows rows={PAGE_SIZE} cols={4} />
+      ) : isError ? (
+        <ErrorState description="Couldn’t load orders." onRetry={() => refetch()} />
+      ) : orders.length === 0 ? (
+        <EmptyState
+          icon={ShoppingCart}
+          title="No orders yet"
+          description="This customer hasn’t placed any orders."
+          className="py-10"
+        />
+      ) : (
+        <>
+          <Table>
+            <caption className="sr-only">Order history for {name}.</caption>
+            <THead>
+              <TR hover={false}>
+                <TH>Order</TH>
+                <TH>Status</TH>
+                <TH numeric>Total</TH>
+                <TH>Date</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {orders.map((o) => (
+                <TR key={o.order_no}>
+                  <TD>
+                    <Link
+                      href={`/admin/orders/${o.order_no}`}
+                      className="text-[13px] font-semibold tabular-nums text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+                    >
+                      {o.order_no}
+                    </Link>
+                  </TD>
+                  <TD>{o.status ? <StatusPill status={o.status} /> : "—"}</TD>
+                  <TD numeric className="font-semibold text-text">
+                    {o.grand_total ? formatBDT(Number(o.grand_total)) : "—"}
+                  </TD>
+                  <TD className="whitespace-nowrap tabular-nums text-text-muted">
+                    {o.placed_at ? formatDate(o.placed_at) : "—"}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          <div className="flex items-center justify-end gap-1 border-t border-border px-4 py-3">
+            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              ‹ Prev
+            </Button>
+            <span className="px-2 text-[12.5px] tabular-nums text-text-muted">Page {page}</span>
+            <Button variant="ghost" size="sm" disabled={!hasNext} onClick={() => setPage((p) => p + 1)}>
+              Next ›
+            </Button>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 

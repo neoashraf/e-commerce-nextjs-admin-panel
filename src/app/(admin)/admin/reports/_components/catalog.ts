@@ -71,7 +71,10 @@ export const REPORT_CATALOG: ReportMeta[] = [
       { value: "category", label: "By category" },
       { value: "delivery_zone", label: "By zone" },
     ],
-    pdf: true,
+    // TEMP (commented out per request, 2026-06-20): hides the "Export PDF" button
+    // on the Sales report page. Re-enable by uncommenting. (Sales is the only
+    // report with a PDF layout, so this is the only place PDF was offered.)
+    // pdf: true,
   },
   {
     key: "orders",

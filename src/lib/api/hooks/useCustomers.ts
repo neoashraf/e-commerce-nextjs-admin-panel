@@ -59,6 +59,27 @@ export const customerDetailSchema = z
       .optional(),
     notes: z.array(z.object({ id: z.string().optional(), body: z.string(), created_at: z.string().optional() })).default([]),
     recent_orders: z.array(z.object({ order_no: z.string(), grand_total: z.string().optional(), status: z.string().optional(), placed_at: z.string().optional() })).default([]),
+    // Bound by the 360 detail view — were previously dropped (missing from the schema → stripped by zod).
+    addresses: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          address_line: z.string().optional(),
+          district: z.string().nullable().optional(),
+          is_default: z.boolean().optional(),
+        }),
+      )
+      .default([]),
+    leads: z
+      .array(
+        z.object({
+          reference: z.string(),
+          type: z.string().optional(),
+          status: z.string().optional(),
+        }),
+      )
+      .default([]),
+    wishlist_count: z.number().optional(),
   })
   .transform(({ customer_id, full_name, aggregates, ...rest }) => ({
     id: customer_id ?? "",
@@ -100,4 +121,29 @@ export function useCustomerStatus(id: string) {
     suspend: useMutation({ mutationFn: () => api.post(`/admin/customers/${id}/suspend`), onSuccess: invalidate }),
     reactivate: useMutation({ mutationFn: () => api.post(`/admin/customers/${id}/reactivate`), onSuccess: invalidate }),
   };
+}
+
+// ── CSV export (async: POST /admin/customers/export → poll GET …/export/{id}) ──
+const customerExportAcceptedSchema = z.object({ export_id: z.string(), status: z.string() });
+const customerExportStatusSchema = z.object({
+  status: z.string(),
+  download_url: z.string().nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+});
+export type CustomerExportStatus = z.infer<typeof customerExportStatusSchema>;
+
+export function useCreateCustomerExport() {
+  return useMutation({
+    mutationFn: (body: { filters: Record<string, unknown>; fields: string[] }) =>
+      api.post("/admin/customers/export", body, { schema: customerExportAcceptedSchema }),
+  });
+}
+export function useCustomerExportStatus(exportId: string | null) {
+  return useQuery({
+    queryKey: ["admin-customer-export", exportId ?? ""] as const,
+    enabled: !!exportId,
+    queryFn: (): Promise<CustomerExportStatus> =>
+      api.get(`/admin/customers/export/${exportId}`, { schema: customerExportStatusSchema }) as Promise<CustomerExportStatus>,
+    refetchInterval: (query) => (query.state.data?.status === "processing" ? 2500 : false),
+  });
 }

@@ -3,6 +3,7 @@
 import { usePromotionsReport } from "@/lib/api/hooks/reports";
 import { formatBDT } from "@/lib/format";
 import { BarBreakdownChart } from "@/components/charts";
+import { ChartCard } from "@/components/ui";
 import type { ReportMeta } from "./catalog";
 import { useReportParams } from "./ReportControls";
 import { DataTable, ReportState, Section } from "./primitives";
@@ -30,9 +31,11 @@ export function PromotionsReport({ meta }: { meta: ReportMeta }) {
     >
       <div className="space-y-6">
         {chartData.length > 0 && (
-          <Section title="Attributed sales by coupon">
-            <BarBreakdownChart data={chartData} valueLabel="Attributed sales" currency />
-          </Section>
+          // ChartCard gives the chart a padded, centered card frame instead of
+          // sitting flush on the canvas.
+          <ChartCard title="Attributed sales by coupon">
+            <BarBreakdownChart data={chartData} valueLabel="Attributed sales" currency horizontal />
+          </ChartCard>
         )}
         <Section title="Coupons">
           <DataTable

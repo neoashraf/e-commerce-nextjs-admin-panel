@@ -75,7 +75,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Sales",
     items: [
       { label: "Orders", href: "/admin/orders", permission: "orders.order.read", icon: ShoppingCart },
-      { label: "Exchanges", href: "/admin/exchanges", permission: "orders.exchange.read", icon: Repeat },
+      // { label: "Exchanges", href: "/admin/exchanges", permission: "orders.exchange.read", icon: Repeat },
       { label: "Customers", href: "/admin/customers", permission: "customers.customer.read", icon: Users },
       { label: "Leads", href: "/admin/leads", permission: "leads.lead.read", icon: UserPlus },
     ],
@@ -99,7 +99,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Notifications",
     items: [
       { label: "Templates", href: "/admin/notifications", permission: "notifications.template.read", icon: Mail },
-      { label: "Delivery Log", href: "/admin/notifications/log", permission: "notifications.log.read", icon: History },
+      // { label: "Delivery Log", href: "/admin/notifications/log", permission: "notifications.log.read", icon: History },
     ],
   },
   {
@@ -107,7 +107,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Admin Users", href: "/admin/users", permission: "rbac.admin_user.read", icon: Shield },
       { label: "Roles", href: "/admin/roles", permission: "rbac.role.read", icon: KeyRound },
-      { label: "Audit Log", href: "/admin/audit", permission: "rbac.audit.read", icon: ScrollText },
+      // { label: "Audit Log", href: "/admin/audit", permission: "rbac.audit.read", icon: ScrollText },
       { label: "Delivery", href: "/admin/settings/delivery", permission: "cart.settings.manage", icon: Truck },
       { label: "Payments", href: "/admin/settings/payments", permission: "payments.settings.manage", icon: CreditCard },
       { label: "Notifications", href: "/admin/settings/notifications", permission: "notifications.settings.manage", icon: BellRing },

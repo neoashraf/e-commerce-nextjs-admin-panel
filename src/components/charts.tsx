@@ -191,6 +191,38 @@ export interface NamedValue {
 }
 
 /**
+ * Single-line Y-axis category tick for the horizontal bar chart. Recharts'
+ * default tick WRAPS long category names onto 2+ lines, which makes the chart
+ * look ragged and unbalanced. This renders exactly one <text> line, right-
+ * aligned against the bars, ellipsising names that are too long (full text is in
+ * the tooltip + the accessible data table).
+ */
+function YCategoryTick({
+  x,
+  y,
+  payload,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: string };
+}) {
+  const raw = String(payload?.value ?? "");
+  const label = raw.length > 18 ? `${raw.slice(0, 17)}…` : raw;
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={4}
+      textAnchor="end"
+      fontSize={AXIS_TICK.fontSize}
+      fill={AXIS_TICK.fill}
+    >
+      {label}
+    </text>
+  );
+}
+
+/**
  * Bar chart for a single dimension (e.g. sales breakdown, top products).
  * `horizontal` flips to horizontal bars for rankings/top-N (design-system §9).
  */
@@ -219,11 +251,14 @@ export function BarBreakdownChart({
 
   if (horizontal) {
     return (
-      <ChartFrame height={Math.max(220, data.length * 36 + 24)}>
+      <ChartFrame height={Math.max(220, data.length * 40 + 16)}>
         <BarChart
           data={data}
           layout="vertical"
-          margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+          // Right margin leaves room so the longest bar + its value never crowd
+          // the card edge; the chart sits balanced in the frame.
+          margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
+          barCategoryGap="22%"
         >
           <CartesianGrid horizontal={false} stroke={GRID_COLOR} />
           <XAxis
@@ -237,10 +272,12 @@ export function BarBreakdownChart({
           <YAxis
             type="category"
             dataKey="name"
-            tick={AXIS_TICK}
             stroke={GRID_COLOR}
             tickLine={false}
-            width={140}
+            // Fixed gutter + single-line truncating tick so every bar starts at
+            // the same baseline and labels never wrap to a second line.
+            width={132}
+            tick={<YCategoryTick />}
           />
           {tooltip}
           <Bar dataKey="value" name={valueLabel} radius={[0, 4, 4, 0]} isAnimationActive={false}>
@@ -252,10 +289,28 @@ export function BarBreakdownChart({
   }
 
   return (
+    // Extra bottom room for the angled category labels so they never clip or
+    // overlap (the old bottom:0 + horizontal ticks collided into garbled
+    // fragments on narrow widths).
     <ChartFrame>
-      <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 28 }}>
         <CartesianGrid vertical={false} stroke={GRID_COLOR} />
-        <XAxis dataKey="name" tick={AXIS_TICK} stroke={GRID_COLOR} tickLine={false} />
+        <XAxis
+          dataKey="name"
+          tick={AXIS_TICK}
+          stroke={GRID_COLOR}
+          tickLine={false}
+          // Angle long category names and thin them out when space is tight so
+          // labels stay legible instead of overlapping into mush.
+          interval="preserveStartEnd"
+          minTickGap={8}
+          angle={-35}
+          textAnchor="end"
+          height={48}
+          tickFormatter={(v: string) =>
+            v.length > 12 ? `${v.slice(0, 11)}…` : v
+          }
+        />
         <YAxis
           tick={AXIS_TICK}
           stroke={GRID_COLOR}

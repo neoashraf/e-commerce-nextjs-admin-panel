@@ -52,7 +52,7 @@ export function ReportViewer({ reportKey }: { reportKey: ReportKey }) {
           <h1 className="text-[22px] font-bold leading-7 text-text">{meta.label}</h1>
           <p className="mt-0.5 text-sm text-text-muted">{meta.description}</p>
         </div>
-        <div className="flex items-start gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <Can permission={REPORTS_SCHEDULE_PERMISSION}>
             <Link href="/admin/reports/schedules">
               <Button

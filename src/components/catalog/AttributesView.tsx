@@ -9,6 +9,7 @@ import type { AttributeRow } from "@/lib/api/schemas/catalog";
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/format";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Badge,
@@ -34,7 +35,7 @@ import {
  * filter + `page` URL-reflected; delete with ATTRIBUTE_IN_USE / SYSTEM_ATTRIBUTE
  * guard toasts. Behaviour unchanged — presentation + pagination only.
  */
-const PAGE_SIZE = 15;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 function Flag({ on }: { on?: boolean }) {
   return <span className={on ? "text-success" : "text-text-faint"} aria-label={on ? "yes" : "no"}>{on ? "✓" : "—"}</span>;

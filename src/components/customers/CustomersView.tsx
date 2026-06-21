@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Calendar, Download, Search, UserRound, Users } from "lucide-react";
-import { useCustomers } from "@/lib/api/hooks/useCustomers";
+import { useCustomersPage } from "@/lib/api/hooks/useCustomers";
 import { useAsyncExport } from "@/lib/api/hooks/reports";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { formatBDT, formatDate } from "@/lib/format";
@@ -21,6 +22,7 @@ import {
   SkeletonRows,
   StatusPill,
   Table,
+  TablePagination,
   TBody,
   TD,
   TH,
@@ -112,25 +114,36 @@ export function CustomersView() {
   const registeredFrom = sp.get("registered_from") ?? "";
   const registeredTo = sp.get("registered_to") ?? "";
   const includeGuests = sp.get("include_guests") === "1";
+  const page = Math.max(1, Number(sp.get("page")) || 1);
 
-  const { data, isLoading, isError, refetch } = useCustomers({
+  const { data, isLoading, isError, refetch } = useCustomersPage({
     q: q || undefined,
     status: status || undefined,
     ...activityParams(activity),
     registration_from: ddmmyyyyToIso(registeredFrom),
     registration_to: ddmmyyyyToIso(registeredTo),
     include_guests: includeGuests ? "true" : undefined,
-    page: 1,
-    limit: 200,
+    page,
+    limit: DEFAULT_PAGE_SIZE,
   });
 
   const [exportOpen, setExportOpen] = useState(false);
-  const rows = useMemo(() => data ?? [], [data]);
+  const rows = useMemo(() => data?.data ?? [], [data]);
+  const total = data?.meta.total ?? 0;
 
+  /** Filter changes reset to page 1 so we never land on an out-of-range page. */
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(sp.toString());
     if (value) next.set(key, value);
     else next.delete(key);
+    if (key !== "page") next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
+  function goPage(p: number) {
+    const next = new URLSearchParams(sp.toString());
+    if (p > 1) next.set("page", String(p));
+    else next.delete("page");
     router.push(`${pathname}?${next.toString()}`);
   }
 
@@ -160,7 +173,7 @@ export function CustomersView() {
     toast("Preparing your CSV — it’ll download and appear in Exports.");
   }
 
-  const resultCount = rows.length;
+  const resultCount = total;
   const hasFilters = !!(q || status || activity || registeredFrom || registeredTo);
 
   if (ready && !can(CUSTOMERS_READ_PERMISSION)) {
@@ -325,6 +338,7 @@ export function CustomersView() {
             }
           />
         ) : (
+          <>
           <div className="overflow-x-auto">
             <Table className="min-w-[860px]">
               <caption className="sr-only">Customers. {resultCount} shown.</caption>
@@ -405,6 +419,13 @@ export function CustomersView() {
               </TBody>
             </Table>
           </div>
+          <TablePagination
+            page={page}
+            pageSize={DEFAULT_PAGE_SIZE}
+            total={total}
+            onPageChange={goPage}
+          />
+          </>
         )}
       </Card>
 

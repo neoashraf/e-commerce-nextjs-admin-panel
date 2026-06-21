@@ -7,6 +7,7 @@ import { PackageX, Upload, WifiOff } from "lucide-react";
 import { useInventory } from "@/lib/api/hooks/useInventory";
 import type { StockRow, StockStatus } from "@/lib/api/schemas/inventory";
 import { Can } from "@/lib/permissions/Can";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { Button, Card, EmptyState, ErrorState, SkeletonRows, TablePagination } from "@/components/ui";
 import { StockExportButton } from "@/app/(admin)/admin/inventory/_components/StockExportButton";
 import { StockFilters } from "@/app/(admin)/admin/inventory/_components/StockFilters";
@@ -57,7 +58,7 @@ export function InventoryView() {
 
   const q = sp.get("q") ?? "";
   const status = sp.get("status") ?? "";
-  const limit = Number(sp.get("limit")) || 50;
+  const limit = Number(sp.get("limit")) || DEFAULT_PAGE_SIZE;
   const page = Number(sp.get("page")) || 1;
 
   const [sort, setSort] = useState<SortKey | null>(null);

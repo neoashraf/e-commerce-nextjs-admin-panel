@@ -8,6 +8,7 @@ import { useCoupons, useUpdateCoupon, useDeleteCoupon } from "@/lib/api/hooks/us
 import type { CouponRow } from "@/lib/api/schemas/promo";
 import { Can } from "@/lib/permissions/Can";
 import { toast } from "@/lib/stores/toast";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Card,
@@ -33,7 +34,7 @@ import {
  * filter + `page` URL-reflected; activate-toggle + edit + delete. Presentation +
  * pagination only.
  */
-const PAGE_SIZE = 15;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 function typeLabel(c: CouponRow): string {
   if (c.discount_type === "free_shipping") return "Free shipping";

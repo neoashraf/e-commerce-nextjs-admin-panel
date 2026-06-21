@@ -1,56 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { Can } from "@/lib/permissions/Can";
 import { Button } from "@/components/ui";
-import { useCreateExport, useExportStatus } from "@/lib/api/hooks/reports";
+import { useAsyncExport } from "@/lib/api/hooks/reports";
 import type { ExportFormat } from "@/lib/api/schemas/reports";
 import { REPORTS_EXPORT_PERMISSION, type ReportMeta } from "./catalog";
 import { useReportParams } from "./ReportControls";
 
 /**
  * Export action on a report viewer (FR-RPT-070). Submits an async export with
- * the viewer's current params, polls the status, and surfaces a download link
- * when ready. Status changes are announced via aria-live. Gated on
- * `reports.report.export`; PDF offered only where the report has a printable
- * layout (meta.pdf).
+ * the viewer's current params, polls the status, and auto-downloads when ready
+ * (shared {@link useAsyncExport}); the file also appears in the Exports manager.
+ * Status changes are announced via aria-live. Gated on `reports.report.export`;
+ * PDF offered only where the report has a printable layout (meta.pdf).
  */
 export function ExportButton({ meta }: { meta: ReportMeta }) {
   const { apiParams } = useReportParams(meta);
-  const create = useCreateExport();
-  const [exportId, setExportId] = useState<string | null>(null);
-  const status = useExportStatus(exportId);
+  const { start, busy, ready, failed, fileUrl } = useAsyncExport();
 
   const submit = (format: ExportFormat) =>
-    create.mutate(
-      { report_key: meta.key, params: apiParams, format },
-      { onSuccess: (r) => setExportId(r.export_id) },
-    );
-
-  const state = status.data?.status;
-  const fileUrl = status.data?.file_url ?? null;
-  const ready = state === "ready" && !!fileUrl;
-  const failed = state === "failed" || create.isError;
-  const busy = create.isPending || state === "processing";
-
-  // One-click download: the moment an export turns `ready`, trigger the download
-  // without a second click. The API serves the file with
-  // `Content-Disposition: attachment`, so a plain link navigation downloads it
-  // directly (PDF included) — no cross-origin fetch needed (static responses
-  // carry no CORS headers, so a fetch() blob would be blocked). `downloadedFor`
-  // guards against re-firing as the status query keeps returning `ready`.
-  const downloadedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!ready || !fileUrl || !exportId || downloadedFor.current === exportId) return;
-    downloadedFor.current = exportId;
-    const a = document.createElement("a");
-    a.href = fileUrl;
-    a.download = fileUrl.split("/").pop() ?? `${meta.key}-export`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }, [ready, fileUrl, exportId, meta.key]);
+    start({ report_key: meta.key, params: apiParams, format });
 
   // Raw-data CSV export lives in each module's own page (Orders, Stock, Customers, …), so the Reports
   // viewer offers CSV only for Sales (which has no dedicated module). PDF (formatted report) stays where

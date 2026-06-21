@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, CalendarClock, MapPin, Package, Printer, Truck } from "lucide-react";
 import {
   useAdminOrder,
   useUpdateOrderStatus,
@@ -11,8 +11,10 @@ import {
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
 import { formatBDT, formatDateTime } from "@/lib/format";
+import { resolveMediaUrl } from "@/lib/media";
 import { toast } from "@/lib/stores/toast";
 import {
+  Badge,
   Button,
   Card,
   ConfirmDialog,
@@ -26,12 +28,14 @@ import { PaymentPanel } from "@/components/payments/PaymentPanel";
 import { printInvoice } from "./printInvoice";
 
 /**
- * Admin order detail (ord-admin-fe), re-skinned to the design system as a single
- * scrolling column (used full-page on direct load and inside the AD3 Drawer over
- * the Orders list). Items/amounts/address/history; a status-advance form
- * (courier/tracking required for shipped; INVALID_TRANSITION / PAYMENT_REQUIRED
- * 409 guards); admin cancel; embedded PAY PaymentPanel. Presentation only — the
- * data hooks, mutations, transition rules, and permission gates are unchanged.
+ * Admin order detail (ord-admin-fe), matched to the design spec (order-detail-admin.md) as a single
+ * scrolling column (used full-page on direct load and inside the AD3 Drawer over the Orders list).
+ * Surfaces the full order snapshot the API returns: placed-at + delivery zone, line items (thumbnail,
+ * variant, unit price × qty), the complete amount breakdown (discount / delivery / COD / VAT), applied
+ * coupon, shipment (courier + tracking), full delivery address, and the status-history timeline (with
+ * actor). Plus the status-advance form (courier/tracking required for shipped; INVALID_TRANSITION /
+ * PAYMENT_REQUIRED 409 guards), admin cancel, and the embedded PAY PaymentPanel. Data hooks, mutations,
+ * transition rules, and permission gates are unchanged.
  */
 // Mirrors the backend FORWARD_LIFECYCLE (fulfilment.service.ts): forward-only,
 // one step at a time — confirmed → processing → packed → shipped →
@@ -45,8 +49,54 @@ const NEXT_STATUS: Record<string, string[]> = {
   out_for_delivery: ["delivered"],
 };
 
+/** "inside_dhaka" → "Inside Dhaka"; "PRED-BLK" stays as-is when there's nothing to humanize. */
+function humanize(value: string): string {
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Render a variant options map ({ color: "Black", size: "42" }) as "Color: Black · Size: 42". */
+function variantLabel(options: Record<string, string> | null | undefined): string {
+  if (!options) return "";
+  return Object.entries(options)
+    .map(([k, v]) => `${humanize(k)}: ${v}`)
+    .join(" · ");
+}
+
+/** BDT from a decimal string (defaults to 0). */
+function money(value: string | null | undefined): string {
+  return formatBDT(Number(value ?? 0));
+}
+
+function num(value: string | null | undefined): number {
+  return Number(value ?? 0);
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="mb-2 text-[15px] font-semibold text-text">{children}</h2>;
+  return (
+    <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-text-faint">
+      {children}
+    </h2>
+  );
+}
+
+/** One line in the amount breakdown. */
+function AmountRow({
+  label,
+  value,
+  muted,
+}: {
+  label: React.ReactNode;
+  value: React.ReactNode;
+  muted?: boolean;
+}) {
+  return (
+    <div className="flex justify-between py-1 text-sm">
+      <span className={muted ? "text-text-faint" : "text-text-muted"}>{label}</span>
+      <span className={muted ? "tabular-nums text-text-faint" : "tabular-nums text-text-secondary"}>
+        {value}
+      </span>
+    </div>
+  );
 }
 
 export function OrderDetailAdminView({
@@ -96,6 +146,12 @@ export function OrderDetailAdminView({
 
   const transitions = NEXT_STATUS[data.status] ?? [];
   const needsCourier = toStatus === "shipped";
+  const shipment = data.shipment;
+  const hasShipment = !!(shipment?.courier_name || shipment?.tracking_number);
+  const itemCount = data.items.reduce((sum, it) => sum + it.quantity, 0);
+  const discount = num(data.amounts?.discount);
+  const codSurcharge = num(data.amounts?.cod_surcharge);
+  const vat = num(data.amounts?.vat);
 
   async function advance() {
     setError(null);
@@ -159,16 +215,36 @@ export function OrderDetailAdminView({
         </div>
       )}
 
-      {/* Status & payment badges + Print invoice */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill status={data.status} />
-          {data.payment_state && (
-            <span className="inline-flex items-center gap-1.5 text-sm text-text-muted">
-              {data.payment_method?.toUpperCase() ?? "—"}
-              <StatusPill status={data.payment_state} />
+      {/* Status & payment badges + placed-at / zone + Print invoice */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill status={data.status} />
+            {data.payment_state && (
+              <span className="inline-flex items-center gap-1.5">
+                <Badge tone="neutral">{data.payment_method?.toUpperCase() ?? "—"}</Badge>
+                <StatusPill status={data.payment_state} />
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
+            {data.placed_at && (
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+                Placed {formatDateTime(data.placed_at)}
+              </span>
+            )}
+            {data.delivery_zone && (
+              <span className="inline-flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                {humanize(data.delivery_zone)}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5">
+              <Package className="h-3.5 w-3.5" aria-hidden="true" />
+              {itemCount} item{itemCount === 1 ? "" : "s"}
             </span>
-          )}
+          </div>
         </div>
         <Button
           variant="secondary"
@@ -231,7 +307,7 @@ export function OrderDetailAdminView({
                 disabled={!toStatus}
                 loading={updateStatus.isPending}
               >
-                Apply
+                {needsCourier ? "Mark as shipped" : "Update status"}
               </Button>
             </div>
             {error && (
@@ -246,18 +322,36 @@ export function OrderDetailAdminView({
       {/* Items */}
       <section>
         <SectionTitle>Order items</SectionTitle>
-        <Card>
+        <Card className="p-0">
           <ul className="divide-y divide-border">
             {data.items.map((it, i) => (
-              <li key={i} className="flex justify-between gap-3 p-3 text-sm">
-                <span>
-                  <span className="block font-medium text-text">{it.product_title}</span>
-                  <span className="text-xs text-text-muted">
-                    {it.sku_code} · Qty {it.quantity}
-                  </span>
-                </span>
-                <span className="shrink-0 font-medium tabular-nums text-text">
-                  {formatBDT(Number(it.line_total))}
+              <li key={i} className="flex items-center gap-3 p-3">
+                {it.product_image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={resolveMediaUrl(it.product_image)}
+                    alt={it.product_title}
+                    className="h-12 w-12 shrink-0 rounded-md border border-border object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-text-faint">
+                    <Package className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-text">{it.product_title}</p>
+                  {variantLabel(it.variant_options) && (
+                    <p className="truncate text-xs text-text-muted">
+                      {variantLabel(it.variant_options)}
+                    </p>
+                  )}
+                  <p className="mt-0.5 text-xs text-text-faint">
+                    {it.sku_code ? `${it.sku_code} · ` : ""}
+                    {money(it.unit_price)} × {it.quantity}
+                  </p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
+                  {money(it.line_total)}
                 </span>
               </li>
             ))}
@@ -269,23 +363,59 @@ export function OrderDetailAdminView({
       {data.amounts && (
         <section>
           <SectionTitle>Order summary</SectionTitle>
-          <Card className="p-4 text-sm">
-            {data.amounts.subtotal != null && (
-              <div className="flex justify-between py-1">
-                <span className="text-text-muted">Subtotal</span>
-                <span className="tabular-nums text-text-secondary">
-                  {formatBDT(Number(data.amounts.subtotal))}
-                </span>
-              </div>
+          <Card className="p-4">
+            <AmountRow label="Subtotal" value={money(data.amounts.subtotal)} />
+            {discount > 0 && (
+              <AmountRow
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    Discount
+                    {data.applied_coupon_code && (
+                      <Badge tone="accent">{data.applied_coupon_code}</Badge>
+                    )}
+                  </span>
+                }
+                value={`− ${money(data.amounts.discount)}`}
+              />
             )}
-            {data.amounts.grand_total != null && (
-              <div className="flex justify-between border-t border-border pt-2 font-semibold">
-                <span className="text-text">Grand total</span>
-                <span className="tabular-nums text-text">
-                  {formatBDT(Number(data.amounts.grand_total))}
-                </span>
-              </div>
+            <AmountRow
+              label="Delivery charge"
+              value={
+                num(data.amounts.delivery_charge) > 0
+                  ? money(data.amounts.delivery_charge)
+                  : "Free"
+              }
+            />
+            {codSurcharge > 0 && (
+              <AmountRow label="COD surcharge" value={money(data.amounts.cod_surcharge)} />
             )}
+            <div className="mt-1 flex justify-between border-t border-border pt-2">
+              <span className="font-semibold text-text">Grand total</span>
+              <span className="font-semibold tabular-nums text-text">
+                {money(data.amounts.grand_total)}
+              </span>
+            </div>
+            {vat > 0 && (
+              <AmountRow label="Incl. VAT" value={money(data.amounts.vat)} muted />
+            )}
+          </Card>
+        </section>
+      )}
+
+      {/* Shipment (once dispatched) */}
+      {hasShipment && (
+        <section>
+          <SectionTitle>Shipment</SectionTitle>
+          <Card className="flex items-start gap-3 p-4 text-sm">
+            <Truck className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+            <div>
+              <p className="font-medium text-text">{shipment?.courier_name ?? "Courier"}</p>
+              {shipment?.tracking_number && (
+                <p className="text-text-muted">
+                  Tracking: <span className="font-mono text-text-secondary">{shipment.tracking_number}</span>
+                </p>
+              )}
+            </div>
           </Card>
         </section>
       )}
@@ -306,9 +436,15 @@ export function OrderDetailAdminView({
             <p className="font-medium text-text">{data.address.recipient_name}</p>
             <p>{data.address.recipient_phone}</p>
             <p className="mt-1">
-              {data.address.address_line}
-              {data.address.area ? `, ${data.address.area}` : ""}
-              {data.address.district ? `, ${data.address.district}` : ""}
+              {[
+                data.address.address_line,
+                data.address.area,
+                data.address.district,
+                data.address.division,
+                data.address.postal_code,
+              ]
+                .filter(Boolean)
+                .join(", ")}
             </p>
           </Card>
         </section>
@@ -326,14 +462,21 @@ export function OrderDetailAdminView({
                     className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-600"
                     aria-hidden="true"
                   />
-                  <div className="flex flex-1 flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-text-secondary">
-                      {h.to_status.replace(/_/g, " ")}
-                      {h.note ? ` — ${h.note}` : ""}
-                    </span>
-                    <span className="text-xs text-text-faint">
+                  <div className="flex flex-1 flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-text">
+                        {humanize(h.to_status)}
+                      </span>
+                      {h.actor_type && (
+                        <span className="text-xs text-text-faint">by {humanize(h.actor_type)}</span>
+                      )}
+                    </div>
+                    <span className="text-xs tabular-nums text-text-faint">
                       {formatDateTime(h.created_at)}
                     </span>
+                    {h.note && (
+                      <p className="w-full text-xs text-text-muted">{h.note}</p>
+                    )}
                   </div>
                 </li>
               ))}
@@ -346,7 +489,7 @@ export function OrderDetailAdminView({
       {data.internal_notes.length > 0 && (
         <section>
           <SectionTitle>Internal notes</SectionTitle>
-          <Card className="divide-y divide-border">
+          <Card className="divide-y divide-border p-0">
             {data.internal_notes.map((n, i) => (
               <div key={i} className="p-3 text-sm">
                 <p className="text-text-secondary">{n.body}</p>

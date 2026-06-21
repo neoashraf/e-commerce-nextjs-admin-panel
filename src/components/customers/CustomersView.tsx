@@ -30,6 +30,7 @@ import {
   TR,
 } from "@/components/ui";
 import { CustomerExportModal } from "./CustomerExportModal";
+import { TagChips, CUSTOMER_TAG_OPTIONS } from "./TagChips";
 import { CUSTOMERS_EXPORT_PERMISSION, CUSTOMERS_READ_PERMISSION } from "./permissions";
 
 /**
@@ -114,11 +115,13 @@ export function CustomersView() {
   const registeredFrom = sp.get("registered_from") ?? "";
   const registeredTo = sp.get("registered_to") ?? "";
   const includeGuests = sp.get("include_guests") === "1";
+  const tag = sp.get("tag") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
 
   const { data, isLoading, isError, refetch } = useCustomersPage({
     q: q || undefined,
     status: status || undefined,
+    tag: tag || undefined,
     ...activityParams(activity),
     registration_from: ddmmyyyyToIso(registeredFrom),
     registration_to: ddmmyyyyToIso(registeredTo),
@@ -240,6 +243,21 @@ export function CustomersView() {
           </Select>
         </div>
 
+        <div className="w-36">
+          <Select
+            aria-label="Filter by tag"
+            value={tag}
+            onChange={(e) => setParam("tag", e.target.value)}
+          >
+            <option value="">All tags</option>
+            {CUSTOMER_TAG_OPTIONS.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+
         {/* Registration date-range (DD/MM/YYYY) */}
         <div className="flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5">
           <Calendar className="h-[15px] w-[15px] flex-shrink-0 text-text-faint" aria-hidden="true" />
@@ -326,7 +344,7 @@ export function CustomersView() {
       {/* ===== TABLE CARD ===== */}
       <Card className="overflow-hidden p-0">
         {isLoading ? (
-          <SkeletonRows rows={8} cols={6} />
+          <SkeletonRows rows={8} cols={8} />
         ) : isError ? (
           <ErrorState description="Couldn’t load customers." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
@@ -348,6 +366,7 @@ export function CustomersView() {
                   <TH>Phone</TH>
                   <TH>Email</TH>
                   <TH>Status</TH>
+                  <TH>Tags</TH>
                   <TH numeric>Orders</TH>
                   <TH numeric>Total spent</TH>
                   <TH>Last order</TH>
@@ -398,6 +417,9 @@ export function CustomersView() {
                       </TD>
                       <TD>
                         <StatusPill status={c.status} label={STATUS_LABEL[c.status] ?? undefined} />
+                      </TD>
+                      <TD>
+                        <TagChips tags={c.tags} max={2} />
                       </TD>
                       <TD numeric className="text-[13px] text-text-secondary">
                         {orders}

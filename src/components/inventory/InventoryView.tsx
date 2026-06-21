@@ -128,7 +128,7 @@ export function InventoryView() {
         </p>
       )}
 
-      <StockFilters q={q} status={status} limit={limit} resultLabel={resultLabel} onChange={patchQuery} />
+      <StockFilters q={q} status={status} resultLabel={resultLabel} onChange={patchQuery} />
 
       {isLoading ? (
         <Card className="p-0">

@@ -233,6 +233,7 @@ export function useAsyncExport() {
   const ready = state === "ready" && !!fileUrl;
   const failed = state === "failed" || create.isError;
   const busy = create.isPending || state === "processing";
+  const reason = status.data?.error_reason ?? null;
 
   useEffect(() => {
     if (!ready || !fileUrl || !exportId || downloadedFor.current === exportId) return;
@@ -251,7 +252,7 @@ export function useAsyncExport() {
     format: ExportFormat;
   }) => create.mutate(body, { onSuccess: (r) => setExportId(r.export_id) });
 
-  return { start, busy, ready, failed, fileUrl };
+  return { start, busy, ready, failed, fileUrl, reason };
 }
 
 /** Export manager list (rpt-export-list-be, EB2). Degrades to empty until shipped. */

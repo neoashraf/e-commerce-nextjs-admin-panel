@@ -19,7 +19,7 @@ export function OrdersExportButton({
 }: {
   filters: { q?: string; status?: string; payment_state?: string; from?: string; to?: string };
 }) {
-  const { start, busy, failed } = useAsyncExport();
+  const { start, busy, failed, reason } = useAsyncExport();
 
   const onExport = () => {
     const params: Record<string, string> = {};
@@ -43,7 +43,9 @@ export function OrdersExportButton({
         </Button>
         <p aria-live="polite" className="text-xs">
           {busy && <span className="text-text-muted">Preparing your CSV — it&apos;ll download and appear in Exports.</span>}
-          {failed && <span className="text-error">Export failed. Try again.</span>}
+          {failed && (
+            <span className="text-error">{reason ? `Export failed: ${reason}` : "Export failed. Try again."}</span>
+          )}
         </p>
       </div>
     </Can>

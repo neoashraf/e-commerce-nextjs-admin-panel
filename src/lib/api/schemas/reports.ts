@@ -205,6 +205,7 @@ export const exportStatusResultSchema = z.object({
   status: exportStatusSchema,
   file_url: z.string().nullable().optional(),
   expires_at: z.string().nullable().optional(),
+  error_reason: z.string().nullable().optional(),
 });
 export type ExportStatusResult = z.infer<typeof exportStatusResultSchema>;
 
@@ -225,6 +226,7 @@ export const exportRowSchema = z
     file_url: z.string().nullable().optional(),
     created_at: z.string().optional(),
     expires_at: z.string().nullable().optional(),
+    error_reason: z.string().nullable().optional(),
     params: z.record(z.unknown()).optional(),
   })
   .transform(({ id, export_id, ...rest }) => ({

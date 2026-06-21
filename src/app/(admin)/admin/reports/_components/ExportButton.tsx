@@ -17,7 +17,7 @@ import { useReportParams } from "./ReportControls";
  */
 export function ExportButton({ meta }: { meta: ReportMeta }) {
   const { apiParams } = useReportParams(meta);
-  const { start, busy, ready, failed, fileUrl } = useAsyncExport();
+  const { start, busy, ready, failed, fileUrl, reason } = useAsyncExport();
 
   const submit = (format: ExportFormat) =>
     start({ report_key: meta.key, params: apiParams, format });
@@ -57,7 +57,9 @@ export function ExportButton({ meta }: { meta: ReportMeta }) {
 
         <p aria-live="polite" className="text-xs">
           {busy && <span className="text-text-muted">Export is processing — we&apos;ll have it ready shortly.</span>}
-          {failed && <span className="text-error">Export failed. Try again.</span>}
+          {failed && (
+            <span className="text-error">{reason ? `Export failed: ${reason}` : "Export failed. Try again."}</span>
+          )}
           {ready && (
             <span className="text-text-muted">
               Downloaded.{" "}

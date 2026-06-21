@@ -571,7 +571,8 @@ function NotesPanel({
 
 function CustomerOrderHistory({ phone, name }: { phone: string; name: string }) {
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, refetch } = useAdminOrders({ phone, page, limit: PAGE_SIZE });
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const { data, isLoading, isError, refetch } = useAdminOrders({ phone, page, limit: pageSize });
   const orders = data?.data ?? [];
   const total = data?.meta.total ?? 0;
 
@@ -585,7 +586,7 @@ function CustomerOrderHistory({ phone, name }: { phone: string; name: string }) 
         />
       </div>
       {isLoading ? (
-        <SkeletonRows rows={PAGE_SIZE} cols={4} />
+        <SkeletonRows rows={pageSize} cols={4} />
       ) : isError ? (
         <ErrorState description="Couldn’t load orders." onRetry={() => refetch()} />
       ) : orders.length === 0 ? (
@@ -631,9 +632,13 @@ function CustomerOrderHistory({ phone, name }: { phone: string; name: string }) 
           </Table>
           <TablePagination
             page={page}
-            pageSize={PAGE_SIZE}
+            pageSize={pageSize}
             total={total}
             onPageChange={setPage}
+            onPageSizeChange={(s) => {
+              setPageSize(s);
+              setPage(1);
+            }}
           />
         </>
       )}

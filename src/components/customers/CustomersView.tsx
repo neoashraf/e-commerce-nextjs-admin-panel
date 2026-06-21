@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Calendar, Download, Search, UserRound, Users } from "lucide-react";
 import { useCustomersPage } from "@/lib/api/hooks/useCustomers";
 import { useAsyncExport } from "@/lib/api/hooks/reports";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { formatBDT, formatDate } from "@/lib/format";
@@ -117,6 +117,7 @@ export function CustomersView() {
   const includeGuests = sp.get("include_guests") === "1";
   const tag = sp.get("tag") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
+  const { pageSize, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useCustomersPage({
     q: q || undefined,
@@ -127,7 +128,7 @@ export function CustomersView() {
     registration_to: ddmmyyyyToIso(registeredTo),
     include_guests: includeGuests ? "true" : undefined,
     page,
-    limit: DEFAULT_PAGE_SIZE,
+    limit: pageSize,
   });
 
   const [exportOpen, setExportOpen] = useState(false);
@@ -443,9 +444,10 @@ export function CustomersView() {
           </div>
           <TablePagination
             page={page}
-            pageSize={DEFAULT_PAGE_SIZE}
+            pageSize={pageSize}
             total={total}
             onPageChange={goPage}
+            onPageSizeChange={setPageSize}
           />
           </>
         )}

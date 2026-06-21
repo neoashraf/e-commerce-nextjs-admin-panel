@@ -8,7 +8,7 @@ import { useCoupons, useUpdateCoupon, useDeleteCoupon } from "@/lib/api/hooks/us
 import type { CouponRow } from "@/lib/api/schemas/promo";
 import { Can } from "@/lib/permissions/Can";
 import { toast } from "@/lib/stores/toast";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Card,
@@ -34,8 +34,6 @@ import {
  * filter + `page` URL-reflected; activate-toggle + edit + delete. Presentation +
  * pagination only.
  */
-const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-
 function typeLabel(c: CouponRow): string {
   if (c.discount_type === "free_shipping") return "Free shipping";
   if (c.discount_type === "percentage") return `${c.value}%`;
@@ -48,9 +46,9 @@ export function CouponsView() {
   const sp = useSearchParams();
   const status = sp.get("status") ?? "";
   const q = sp.get("q") ?? "";
-  const page = Math.max(1, Number(sp.get("page") ?? "1") || 1);
+  const { page, pageSize, setPage, setPageSize } = usePageParams();
 
-  const { data, isLoading, isError, refetch } = useCoupons({ q: q || undefined, status: status || undefined, page, limit: PAGE_SIZE });
+  const { data, isLoading, isError, refetch } = useCoupons({ q: q || undefined, status: status || undefined, page, limit: pageSize });
   const del = useDeleteCoupon();
   const [target, setTarget] = useState<CouponRow | null>(null);
 
@@ -122,7 +120,7 @@ export function CouponsView() {
                 {rows.map((c) => <CouponRowItem key={c.id} coupon={c} onDelete={() => setTarget(c)} />)}
               </TBody>
             </Table>
-            <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(p) => setParam("page", String(p))} />
+            <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         )}
       </Card>

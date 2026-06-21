@@ -9,7 +9,7 @@ import type { AttributeRow } from "@/lib/api/schemas/catalog";
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/format";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Badge,
@@ -35,8 +35,6 @@ import {
  * filter + `page` URL-reflected; delete with ATTRIBUTE_IN_USE / SYSTEM_ATTRIBUTE
  * guard toasts. Behaviour unchanged — presentation + pagination only.
  */
-const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-
 function Flag({ on }: { on?: boolean }) {
   return <span className={on ? "text-success" : "text-text-faint"} aria-label={on ? "yes" : "no"}>{on ? "✓" : "—"}</span>;
 }
@@ -47,13 +45,13 @@ export function AttributesView() {
   const sp = useSearchParams();
   const type = sp.get("type") ?? "";
   const q = sp.get("q") ?? "";
-  const page = Math.max(1, Number(sp.get("page") ?? "1") || 1);
+  const { page, pageSize, setPage, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useAttributes({
     type: type || undefined,
     q: q || undefined,
     page,
-    limit: PAGE_SIZE,
+    limit: pageSize,
   });
   const del = useDeleteAttribute();
   const [target, setTarget] = useState<AttributeRow | null>(null);
@@ -168,7 +166,7 @@ export function AttributesView() {
                 ))}
               </TBody>
             </Table>
-            <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(p) => setParam("page", String(p))} />
+            <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         )}
       </Card>

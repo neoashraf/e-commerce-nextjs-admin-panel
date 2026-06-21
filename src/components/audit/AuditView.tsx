@@ -6,7 +6,7 @@ import { useAuditLog, exportAudit } from "@/lib/api/hooks/useAudit";
 import type { AuditEntry, AuditResult } from "@/lib/api/schemas/audit";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 import {
   Button,
   Card,
@@ -57,6 +57,7 @@ export function AuditView() {
     to: sp.get("to") ?? "",
   };
   const page = Math.max(1, Number(sp.get("page")) || 1);
+  const { pageSize, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useAuditLog({
     actor: filters.actor || undefined,
@@ -66,7 +67,7 @@ export function AuditView() {
     from: filters.from || undefined,
     to: filters.to || undefined,
     page,
-    limit: DEFAULT_PAGE_SIZE,
+    limit: pageSize,
   });
 
   const rows = data?.data ?? [];
@@ -161,7 +162,7 @@ export function AuditView() {
 
       <Card className="overflow-hidden p-0">
         {isLoading ? (
-          <SkeletonRows rows={DEFAULT_PAGE_SIZE} cols={5} />
+          <SkeletonRows rows={pageSize} cols={5} />
         ) : isError ? (
           <ErrorState description="Couldn’t load the audit log." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
@@ -194,9 +195,10 @@ export function AuditView() {
             </Table>
             <TablePagination
               page={page}
-              pageSize={DEFAULT_PAGE_SIZE}
+              pageSize={pageSize}
               total={total}
               onPageChange={goPage}
+              onPageSizeChange={setPageSize}
             />
           </>
         )}

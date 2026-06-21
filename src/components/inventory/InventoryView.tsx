@@ -183,6 +183,7 @@ export function InventoryView() {
               pageSize={limit}
               total={total}
               onPageChange={(p) => patchQuery({ page: String(p) })}
+              onPageSizeChange={(s) => patchQuery({ limit: String(s), page: undefined })}
             />
           </Card>
           {/* Mobile: stacked cards + pagination. */}
@@ -201,6 +202,7 @@ export function InventoryView() {
                 pageSize={limit}
                 total={total}
                 onPageChange={(p) => patchQuery({ page: String(p) })}
+                onPageSizeChange={(s) => patchQuery({ limit: String(s), page: undefined })}
               />
             </Card>
           </div>

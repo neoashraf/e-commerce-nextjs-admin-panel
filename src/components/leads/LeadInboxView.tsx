@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminLeads } from "@/lib/api/hooks/useLeadsAdmin";
 import { formatDateTime } from "@/lib/format";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 import {
   Badge,
   Card,
@@ -28,17 +28,15 @@ import {
  * 15/page paginated footer backed by the API `meta.total`. Status/type filter +
  * `page` URL-reflected; rows open the thread. Presentation + pagination only.
  */
-const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-
 export function LeadInboxView() {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
   const status = sp.get("status") ?? "";
   const type = sp.get("type") ?? "";
-  const page = Math.max(1, Number(sp.get("page") ?? "1") || 1);
+  const { page, pageSize, setPage, setPageSize } = usePageParams();
 
-  const { data, isLoading, isError, refetch } = useAdminLeads({ status: status || undefined, type: type || undefined, page, limit: PAGE_SIZE });
+  const { data, isLoading, isError, refetch } = useAdminLeads({ status: status || undefined, type: type || undefined, page, limit: pageSize });
 
   const rows = data?.data ?? [];
   const total = data?.meta.total ?? 0;
@@ -119,7 +117,7 @@ export function LeadInboxView() {
                 ))}
               </TBody>
             </Table>
-            <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(p) => setParam("page", String(p))} />
+            <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         )}
       </Card>

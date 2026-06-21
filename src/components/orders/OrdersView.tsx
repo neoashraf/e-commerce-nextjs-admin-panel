@@ -25,7 +25,7 @@ import {
   TR,
   type TabItem,
 } from "@/components/ui";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 
 /**
  * Admin orders list (ord-admin-fe) — LIST archetype on the AD0 Table.
@@ -34,8 +34,6 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
  * URL-reflected. Paginated via the shared TablePagination footer (DEFAULT_PAGE_SIZE/page,
  * "Showing X–Y of N"). Rows open the order detail drawer (AD3). Presentation only.
  */
-const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-
 /** Status tabs — lifecycle statuses only; no Exchanges tab (separate module). */
 const STATUS_TABS: TabItem[] = [
   { key: "all", label: "All" },
@@ -58,6 +56,7 @@ export function OrdersView() {
   const from = sp.get("from") ?? "";
   const to = sp.get("to") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
+  const { pageSize, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useAdminOrders({
     status: status || undefined,
@@ -66,7 +65,7 @@ export function OrdersView() {
     from: from || undefined,
     to: to || undefined,
     page,
-    limit: PAGE_SIZE,
+    limit: pageSize,
   });
 
   const rows = data?.data ?? [];
@@ -166,7 +165,7 @@ export function OrdersView() {
 
       <Card className="overflow-hidden p-0">
         {isLoading ? (
-          <SkeletonRows rows={PAGE_SIZE} cols={6} />
+          <SkeletonRows rows={pageSize} cols={6} />
         ) : isError ? (
           <ErrorState description="Couldn't load orders." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
@@ -243,9 +242,10 @@ export function OrdersView() {
 
             <TablePagination
               page={page}
-              pageSize={PAGE_SIZE}
+              pageSize={pageSize}
               total={total}
               onPageChange={goPage}
+              onPageSizeChange={setPageSize}
             />
           </>
         )}

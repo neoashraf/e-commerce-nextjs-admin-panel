@@ -13,16 +13,17 @@ import {
   MapPin,
   ShoppingBag,
   ShoppingCart,
+  StickyNote,
   TrendingUp,
   User,
   UserCheck,
   UserX,
 } from "lucide-react";
-import { useCustomer, useCustomerStatus } from "@/lib/api/hooks/useCustomers";
+import { useCustomer, useCustomerStatus, useAddNote } from "@/lib/api/hooks/useCustomers";
 import { useAdminOrders } from "@/lib/api/hooks/useOrdersAdmin";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import { formatBDT, formatDate } from "@/lib/format";
+import { formatBDT, formatDate, formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/stores/toast";
 import { cn } from "@/lib/cn";
 import {
@@ -43,7 +44,9 @@ import {
   TR,
 } from "@/components/ui";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { TagChips } from "./TagChips";
 import {
+  CUSTOMERS_NOTE_PERMISSION,
   CUSTOMERS_READ_PERMISSION,
   CUSTOMERS_SUSPEND_PERMISSION,
 } from "./permissions";
@@ -279,6 +282,12 @@ export function CustomerDetailView({ id }: { id: string }) {
                 )}
               </div>
 
+              {data.tags.length > 0 && (
+                <div className="mt-2.5">
+                  <TagChips tags={data.tags} max={6} />
+                </div>
+              )}
+
             </div>
           </div>
 
@@ -467,7 +476,8 @@ export function CustomerDetailView({ id }: { id: string }) {
             )}
           </Card>
 
-          {/* Internal notes — removed per product. */}
+          {/* (7) INTERNAL NOTES */}
+          <NotesPanel customerId={data.id} notes={data.notes} />
         </div>
       </div>
 
@@ -491,6 +501,74 @@ export function CustomerDetailView({ id }: { id: string }) {
 }
 
 /** Order history — all of the customer's orders (matched by phone), paginated via the shared footer. */
+/** Internal notes (FR-CUST-030/031) — append-only list + add form (never customer-visible). */
+function NotesPanel({
+  customerId,
+  notes,
+}: {
+  customerId: string;
+  notes: { id?: string; body: string; created_at?: string }[];
+}) {
+  const [draft, setDraft] = useState("");
+  const add = useAddNote(customerId);
+
+  function submit() {
+    const body = draft.trim();
+    if (!body) return;
+    add.mutate(body, {
+      onSuccess: () => {
+        setDraft("");
+        toast("Note added.");
+      },
+      onError: () => toast("Couldn’t add the note. Try again.", "error"),
+    });
+  }
+
+  return (
+    <Card className="p-[18px]">
+      <PanelHeader
+        icon={StickyNote}
+        title="Internal notes"
+        count={notes.length ? String(notes.length) : undefined}
+      />
+      <Can permission={CUSTOMERS_NOTE_PERMISSION}>
+        <div className="mt-3">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
+            placeholder="Add an internal note…"
+            aria-label="Add an internal note"
+            className="w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+          />
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[11.5px] text-text-faint">Never visible to the customer.</span>
+            <Button size="sm" onClick={submit} loading={add.isPending} disabled={!draft.trim()}>
+              Add note
+            </Button>
+          </div>
+        </div>
+      </Can>
+      {notes.length === 0 ? (
+        <p className="mt-3 text-[12.5px] text-text-muted">No notes yet.</p>
+      ) : (
+        <ul className="mt-3 flex flex-col gap-2.5">
+          {notes.map((n, i) => (
+            <li key={n.id ?? i} className="rounded-lg border border-border bg-surface-hover p-3">
+              <p className="whitespace-pre-wrap text-[12.5px] text-text-secondary">{n.body}</p>
+              {n.created_at && (
+                <p className="mt-1 text-[11px] tabular-nums text-text-faint">
+                  {formatDateTime(n.created_at)}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 function CustomerOrderHistory({ phone, name }: { phone: string; name: string }) {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, refetch } = useAdminOrders({ phone, page, limit: PAGE_SIZE });

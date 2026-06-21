@@ -1,12 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Calendar, Download, Search, UserRound, Users } from "lucide-react";
-import { useCustomers, customerRowSchema, type CustomerRow } from "@/lib/api/hooks/useCustomers";
-import { fetchAllRows, buildCsv, downloadCsv, todayStamp } from "@/lib/exportCsv";
+import { useCustomers } from "@/lib/api/hooks/useCustomers";
+import { useAsyncExport } from "@/lib/api/hooks/reports";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { formatBDT, formatDate } from "@/lib/format";
@@ -77,16 +76,16 @@ function activityParams(a: string): Record<string, string> {
   }
 }
 
-/** Exportable columns (label → cell value) for the client-side CSV. */
-const EXPORT_FIELD_VALUE: Record<string, (c: CustomerRow) => string> = {
-  Name: (c) => c.name ?? "",
-  Phone: (c) => c.phone ?? "",
-  Email: (c) => c.email ?? "",
-  Status: (c) => STATUS_LABEL[c.status] ?? c.status,
-  Orders: (c) => String(c.order_count ?? 0),
-  "Total spent": (c) => c.total_spent ?? "",
-  "Last order": (c) => c.last_order_at ?? "",
-  "Customer ID": (c) => c.id,
+/** Modal field label → backend customer-directory column key (the `customers_list` export). */
+const EXPORT_FIELD_KEY: Record<string, string> = {
+  Name: "full_name",
+  Phone: "phone",
+  Email: "email",
+  Status: "status",
+  Orders: "order_count",
+  "Total spent": "total_spent",
+  "Last order": "last_order_at",
+  "Customer ID": "customer_id",
 };
 
 function initials(name: string): string {
@@ -135,46 +134,30 @@ export function CustomersView() {
     router.push(`${pathname}?${next.toString()}`);
   }
 
-  const [exporting, setExporting] = useState(false);
+  const { start: startExport, busy: exporting } = useAsyncExport();
 
   /**
-   * Client-side CSV (honours the modal's field selection). Fetches EVERY page of the current filtered
-   * view — not just the loaded list page — then serializes + downloads in the browser. Replaces the
-   * async export pipeline so the file is produced reliably without a backend job.
+   * Customer-directory CSV via the async reports-export pipeline (POST /admin/reports/export, report
+   * `customers_list`), so the file is tracked in the Exports manager (MANAGE › Exports) and auto-downloads
+   * when ready. Honours the modal's field selection (sent as `fields`) and the current list filters
+   * (q / status / last-order range).
    */
-  async function confirmExport(fields: string[]) {
+  function confirmExport(fields: string[]) {
     setExportOpen(false);
-    const cols = fields.filter((f) => EXPORT_FIELD_VALUE[f]);
+    const cols = fields.map((f) => EXPORT_FIELD_KEY[f]).filter(Boolean);
     if (cols.length === 0) {
       toast("Select at least one field to export.", "info");
       return;
     }
-    setExporting(true);
-    try {
-      const all = await fetchAllRows(
-        "/admin/customers",
-        {
-          q: q || undefined,
-          status: status || undefined,
-          ...activityParams(activity),
-          registration_from: ddmmyyyyToIso(registeredFrom),
-          registration_to: ddmmyyyyToIso(registeredTo),
-          include_guests: includeGuests ? "true" : undefined,
-        },
-        z.array(customerRowSchema),
-      );
-      if (all.length === 0) {
-        toast("Nothing to export for the current filter.", "info");
-        return;
-      }
-      const csv = buildCsv(cols, all.map((c) => cols.map((f) => EXPORT_FIELD_VALUE[f](c))));
-      downloadCsv(`customers-${todayStamp()}.csv`, csv);
-      toast(`Exported ${all.length} customer${all.length === 1 ? "" : "s"} to CSV.`);
-    } catch {
-      toast("Export failed. Try again.", "error");
-    } finally {
-      setExporting(false);
-    }
+    const params: Record<string, unknown> = { fields: cols, ...activityParams(activity) };
+    if (q) params.q = q;
+    if (status) params.status = status;
+    const regFrom = ddmmyyyyToIso(registeredFrom);
+    const regTo = ddmmyyyyToIso(registeredTo);
+    if (regFrom) params.registration_from = regFrom;
+    if (regTo) params.registration_to = regTo;
+    startExport({ report_key: "customers_list", params, format: "csv" });
+    toast("Preparing your CSV — it’ll download and appear in Exports.");
   }
 
   const resultCount = rows.length;

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { paginated } from "@/lib/api/schemas/pagination";
 
 /**
  * Admin customers hooks + schemas (cust-fe). Read-only 360 + notes/tags/status.
@@ -96,6 +97,20 @@ export function useCustomers(params: Record<string, string | number | boolean | 
   return useQuery({
     queryKey: ["admin-customers", qs] as const,
     queryFn: (): Promise<CustomerRow[]> => api.get("/admin/customers", { schema: customerListSchema, params }) as Promise<CustomerRow[]>,
+    staleTime: 20_000,
+  });
+}
+
+/** Paginated `{ data, meta }` variant for the directory list (drives the shared TablePagination footer). */
+const customerPageSchema = paginated(customerListSchema);
+export type CustomerPage = z.infer<typeof customerPageSchema>;
+
+export function useCustomersPage(params: Record<string, string | number | boolean | undefined>) {
+  const qs = JSON.stringify(params);
+  return useQuery({
+    queryKey: ["admin-customers", qs] as const,
+    queryFn: (): Promise<CustomerPage> =>
+      api.get("/admin/customers", { schema: customerPageSchema, params, rawEnvelope: true }) as Promise<CustomerPage>,
     staleTime: 20_000,
   });
 }

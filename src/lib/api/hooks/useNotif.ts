@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { paginated, type PaginationMeta } from "@/lib/api/schemas/pagination";
 
 /** Admin notifications hooks + schemas (notif-templates-fe, notif-log-fe). */
 
@@ -54,12 +55,17 @@ export const notifLogRowSchema = z.object({
 });
 export type NotifLogRow = z.infer<typeof notifLogRowSchema>;
 const notifLogListSchema = z.array(notifLogRowSchema);
+const notifLogPageSchema = paginated(notifLogListSchema);
 
 export function useNotifLog(params: Record<string, string | number | boolean | undefined>) {
   const qs = JSON.stringify(params);
   return useQuery({
     queryKey: ["admin-notif-log", qs] as const,
-    queryFn: (): Promise<NotifLogRow[]> => api.get("/admin/notifications", { schema: notifLogListSchema, params }) as Promise<NotifLogRow[]>,
+    queryFn: (): Promise<{ data: NotifLogRow[]; meta: PaginationMeta }> =>
+      api.get("/admin/notifications", { schema: notifLogPageSchema, params, rawEnvelope: true }) as Promise<{
+        data: NotifLogRow[];
+        meta: PaginationMeta;
+      }>,
     staleTime: 15_000,
   });
 }

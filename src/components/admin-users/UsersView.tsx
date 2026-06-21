@@ -10,6 +10,7 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { Can } from "@/lib/permissions/Can";
 import { formatDateTime } from "@/lib/format";
 import { ApiError } from "@/lib/api/errors";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Card,
@@ -36,7 +37,7 @@ import {
  * (suspend/reactivate/delete/resend-invite) behind confirm dialogs and `<Can>`;
  * own-row destructive actions hidden. Presentation + pagination only.
  */
-const PAGE_SIZE = 15;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 type Pending = { kind: "suspend" | "reactivate" | "delete"; user: AdminUserRow } | null;
 

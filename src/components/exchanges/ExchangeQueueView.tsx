@@ -9,21 +9,29 @@ import {
 } from "@/lib/api/schemas/exchanges";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { formatDate } from "@/lib/format";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  Select,
+  SkeletonRows,
+  StatusPill,
+  Table,
+  TablePagination,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from "@/components/ui";
 
 /**
- * Exchange queue (ord-exchange-admin-fe, AC1/FR-ORD-047). Filterable table
- * (status, reason) with a QA-due highlight for quality-defect reviews. Gated on
- * `orders.exchange.read`; rows link to the review screen.
+ * Exchange queue (ord-exchange-admin-fe, AC1/FR-ORD-047) on the shared Data Table
+ * primitive: Card-wrapped table, StatusPill, a QA-due highlight for quality-defect
+ * reviews, and the shared TablePagination footer (DEFAULT_PAGE_SIZE/page). Filterable
+ * (status, reason), URL-reflected; gated on `orders.exchange.read`; rows link to review.
  */
-const STATUS_STYLE: Record<string, string> = {
-  requested: "bg-blue-50 text-blue-700",
-  under_qa_review: "bg-amber-50 text-amber-700",
-  approved: "bg-indigo-50 text-indigo-700",
-  replacement_issued: "bg-green-50 text-green-700",
-  completed: "bg-green-50 text-green-700",
-  rejected: "bg-gray-100 text-gray-500",
-};
-
 const humanize = (s: string) => s.replace(/_/g, " ");
 
 /** Returns "overdue" | "soon" | null for a QA due date (≤2 days = soon). */
@@ -45,127 +53,157 @@ export function ExchangeQueueView() {
 
   const status = sp.get("status") ?? "";
   const reason = sp.get("reason") ?? "";
+  const page = Math.max(1, Number(sp.get("page")) || 1);
 
   const { data, isLoading, isError, refetch } = useExchanges({
     status: status || undefined,
     reason: reason || undefined,
-    page: 1,
-    limit: 50,
+    page,
+    limit: DEFAULT_PAGE_SIZE,
   });
 
+  const rows = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
+
+  /** Filter changes reset to page 1. */
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(sp.toString());
     if (value) next.set(key, value);
     else next.delete(key);
+    if (key !== "page") next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
+  function goPage(p: number) {
+    const next = new URLSearchParams(sp.toString());
+    if (p > 1) next.set("page", String(p));
+    else next.delete("page");
     router.push(`${pathname}?${next.toString()}`);
   }
 
   if (!can("orders.exchange.read")) {
     return (
-      <div className="py-12 text-center">
-        <h1 className="text-xl font-bold text-gray-900">Exchanges</h1>
-        <p className="mt-2 text-sm text-gray-500">You don&apos;t have permission to view exchanges.</p>
-      </div>
+      <Card className="p-0">
+        <EmptyState
+          title="No access to exchanges"
+          description="You don’t have permission to view exchanges."
+        />
+      </Card>
     );
   }
-
-  const inp = "h-10 rounded-md border border-gray-300 px-3 text-sm";
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Exchanges</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">Exchanges</h1>
+        <p className="mt-0.5 text-sm text-text-muted">
           Exchange/replacement only — no cash refund. Quality claims must pass QA before approval.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <select className={inp} value={status} onChange={(e) => setParam("status", e.target.value)} aria-label="Filter by status">
-          <option value="">All statuses</option>
-          {EXCHANGE_STATUSES.map((s) => (
-            <option key={s} value={s}>{humanize(s)}</option>
-          ))}
-        </select>
-        <select className={inp} value={reason} onChange={(e) => setParam("reason", e.target.value)} aria-label="Filter by reason">
-          <option value="">All reasons</option>
-          {EXCHANGE_REASONS.map((r) => (
-            <option key={r} value={r}>{humanize(r)}</option>
-          ))}
-        </select>
+        <div className="w-44">
+          <Select value={status} onChange={(e) => setParam("status", e.target.value)} aria-label="Filter by status">
+            <option value="">All statuses</option>
+            {EXCHANGE_STATUSES.map((s) => (
+              <option key={s} value={s}>{humanize(s)}</option>
+            ))}
+          </Select>
+        </div>
+        <div className="w-44">
+          <Select value={reason} onChange={(e) => setParam("reason", e.target.value)} aria-label="Filter by reason">
+            <option value="">All reasons</option>
+            {EXCHANGE_REASONS.map((r) => (
+              <option key={r} value={r}>{humanize(r)}</option>
+            ))}
+          </Select>
+        </div>
       </div>
 
-      {isLoading ? (
-        <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
-      ) : isError ? (
-        <div className="py-12 text-center">
-          <p className="text-sm text-gray-600">Couldn&apos;t load exchanges.</p>
-          <button type="button" onClick={() => refetch()} className="mt-2 text-sm font-medium text-brand-700 hover:underline">
-            Try again
-          </button>
-        </div>
-      ) : !data || data.length === 0 ? (
-        <p className="py-12 text-center text-sm text-gray-500">No exchange requests match your filters.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-              <th className="py-2 pr-4 font-medium">Exchange</th>
-              <th className="py-2 pr-4 font-medium">Order</th>
-              <th className="py-2 pr-4 font-medium">Item</th>
-              <th className="py-2 pr-4 font-medium">Reason</th>
-              <th className="py-2 pr-4 font-medium">Status</th>
-              <th className="py-2 font-medium">QA due</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((x) => {
-              const urgency = qaUrgency(x.qa_due_at);
-              return (
-                <tr key={x.exchange_id} className="border-b border-gray-100">
-                  <td className="py-3 pr-4">
-                    <Link href={`/admin/exchanges/${x.exchange_id}`} className="font-mono text-xs font-medium text-brand-700 hover:underline">
-                      {x.exchange_id}
-                    </Link>
-                  </td>
-                  <td className="py-3 pr-4">
-                    <Link href={`/admin/orders/${x.order_no}`} className="font-mono text-xs text-gray-600 hover:underline">
-                      {x.order_no}
-                    </Link>
-                  </td>
-                  <td className="py-3 pr-4 text-gray-700">
-                    {x.order_item?.title ?? x.order_item?.sku_code ?? "—"}
-                  </td>
-                  <td className="py-3 pr-4 text-gray-700">{humanize(x.reason)}</td>
-                  <td className="py-3 pr-4">
-                    <span className={"rounded-full px-2 py-0.5 text-xs font-medium " + (STATUS_STYLE[x.status] ?? "bg-gray-100 text-gray-500")}>
-                      {humanize(x.status)}
-                    </span>
-                  </td>
-                  <td className="py-3">
-                    {x.qa_due_at ? (
-                      <span
-                        className={
-                          urgency === "overdue"
-                            ? "font-medium text-red-600"
-                            : urgency === "soon"
-                              ? "font-medium text-amber-600"
-                              : "text-gray-400"
-                        }
-                      >
-                        {formatDate(x.qa_due_at)}
-                        {urgency === "overdue" ? " · overdue" : urgency === "soon" ? " · soon" : ""}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+      <Card className="overflow-hidden p-0">
+        {isLoading ? (
+          <SkeletonRows rows={DEFAULT_PAGE_SIZE} cols={6} />
+        ) : isError ? (
+          <ErrorState description="Couldn’t load exchanges." onRetry={() => refetch()} />
+        ) : rows.length === 0 ? (
+          <EmptyState title="No exchange requests match your filters." />
+        ) : (
+          <>
+            <Table>
+              <THead>
+                <TR hover={false}>
+                  <TH>Exchange</TH>
+                  <TH>Order</TH>
+                  <TH>Item</TH>
+                  <TH>Reason</TH>
+                  <TH>Status</TH>
+                  <TH>QA due</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {rows.map((x) => {
+                  const urgency = qaUrgency(x.qa_due_at);
+                  return (
+                    <TR
+                      key={x.exchange_id}
+                      className="cursor-pointer"
+                      onClick={() => router.push(`/admin/exchanges/${x.exchange_id}`)}
+                    >
+                      <TD>
+                        <Link
+                          href={`/admin/exchanges/${x.exchange_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-mono text-xs font-medium text-accent-700 hover:underline"
+                        >
+                          {x.exchange_id}
+                        </Link>
+                      </TD>
+                      <TD>
+                        <Link
+                          href={`/admin/orders/${x.order_no}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-mono text-xs text-text-secondary hover:underline"
+                        >
+                          {x.order_no}
+                        </Link>
+                      </TD>
+                      <TD>{x.order_item?.title ?? x.order_item?.sku_code ?? "—"}</TD>
+                      <TD>{humanize(x.reason)}</TD>
+                      <TD>
+                        <StatusPill status={x.status} label={humanize(x.status)} />
+                      </TD>
+                      <TD>
+                        {x.qa_due_at ? (
+                          <span
+                            className={
+                              urgency === "overdue"
+                                ? "font-medium text-error"
+                                : urgency === "soon"
+                                  ? "font-medium text-warning"
+                                  : "text-text-muted"
+                            }
+                          >
+                            {formatDate(x.qa_due_at)}
+                            {urgency === "overdue" ? " · overdue" : urgency === "soon" ? " · soon" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-text-faint">—</span>
+                        )}
+                      </TD>
+                    </TR>
+                  );
+                })}
+              </TBody>
+            </Table>
+            <TablePagination
+              page={page}
+              pageSize={DEFAULT_PAGE_SIZE}
+              total={total}
+              onPageChange={goPage}
+            />
+          </>
+        )}
+      </Card>
     </div>
   );
 }

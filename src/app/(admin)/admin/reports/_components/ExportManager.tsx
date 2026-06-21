@@ -345,6 +345,14 @@ export function ExportManager() {
                     </TD>
                     <TD>
                       <StatusPill status={r.status} />
+                      {r.status === "failed" && r.error_reason && (
+                        <p
+                          className="mt-0.5 max-w-[220px] truncate text-[11px] text-error"
+                          title={r.error_reason}
+                        >
+                          {r.error_reason}
+                        </p>
+                      )}
                     </TD>
                     <TD
                       className={cn(

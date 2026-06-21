@@ -24,14 +24,67 @@ export type OrderPage = z.infer<typeof orderPageSchema>;
 export const adminOrderDetailSchema = z.object({
   order_no: z.string(),
   status: z.string(),
+  placed_at: z.string().optional(),
+  delivery_zone: z.string().optional(),
   payment_method: z.string().optional(),
   payment_state: z.string().optional(),
   payment_id: z.string().nullable().optional(),
-  address: z.object({ recipient_name: z.string(), recipient_phone: z.string(), address_line: z.string(), area: z.string().nullable().optional(), district: z.string().nullable().optional(), division: z.string().nullable().optional() }).nullable().optional(),
-  items: z.array(z.object({ product_title: z.string(), sku_code: z.string().nullable().optional(), variant_options: z.record(z.string()).default({}), unit_price: z.string(), quantity: z.number(), line_total: z.string() })).default([]),
-  amounts: z.object({ subtotal: z.string(), grand_total: z.string() }).partial().optional(),
-  shipment: z.object({ courier_name: z.string().nullable().optional(), tracking_number: z.string().nullable().optional() }).nullable().optional(),
-  history: z.array(z.object({ to_status: z.string(), note: z.string().nullable().optional(), created_at: z.string() })).default([]),
+  address: z
+    .object({
+      recipient_name: z.string(),
+      recipient_phone: z.string(),
+      address_line: z.string(),
+      area: z.string().nullable().optional(),
+      district: z.string().nullable().optional(),
+      division: z.string().nullable().optional(),
+      postal_code: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  items: z
+    .array(
+      z.object({
+        product_title: z.string(),
+        product_title_bn: z.string().nullable().optional(),
+        product_image: z.string().nullable().optional(),
+        sku_code: z.string().nullable().optional(),
+        variant_options: z.record(z.string()).default({}),
+        unit_price: z.string(),
+        quantity: z.number(),
+        line_total: z.string(),
+      }),
+    )
+    .default([]),
+  amounts: z
+    .object({
+      subtotal: z.string(),
+      discount: z.string(),
+      delivery_charge: z.string(),
+      cod_surcharge: z.string(),
+      vat: z.string(),
+      grand_total: z.string(),
+    })
+    .partial()
+    .optional(),
+  applied_coupon_code: z.string().nullable().optional(),
+  shipment: z
+    .object({
+      courier_name: z.string().nullable().optional(),
+      tracking_number: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  history: z
+    .array(
+      z.object({
+        from_status: z.string().nullable().optional(),
+        to_status: z.string(),
+        actor_type: z.string().nullable().optional(),
+        note: z.string().nullable().optional(),
+        created_at: z.string(),
+      }),
+    )
+    .default([]),
   internal_notes: z.array(z.object({ body: z.string(), created_at: z.string().optional() })).default([]),
 });
 export type AdminOrderDetail = z.infer<typeof adminOrderDetailSchema>;

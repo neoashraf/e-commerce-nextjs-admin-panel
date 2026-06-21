@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import {
@@ -212,6 +213,45 @@ export function useExportStatus(id: string | null) {
     refetchInterval: (query) =>
       query.state.data?.status === "processing" ? 2500 : false,
   });
+}
+
+/**
+ * Drive a single async export end-to-end: create (POST /export) → poll status → auto-download the file
+ * the moment it turns `ready`. Used by the per-module export buttons (Orders, Stock, Customers) and the
+ * Reports viewer so every export lands in the Exports manager (report_exports) AND downloads itself once
+ * ready (FR-RPT-070). The download is a plain anchor navigation (the file is served with
+ * `Content-Disposition: attachment`), so no cross-origin fetch/blob is needed.
+ */
+export function useAsyncExport() {
+  const create = useCreateExport();
+  const [exportId, setExportId] = useState<string | null>(null);
+  const status = useExportStatus(exportId);
+  const downloadedFor = useRef<string | null>(null);
+
+  const state = status.data?.status;
+  const fileUrl = status.data?.file_url ?? null;
+  const ready = state === "ready" && !!fileUrl;
+  const failed = state === "failed" || create.isError;
+  const busy = create.isPending || state === "processing";
+
+  useEffect(() => {
+    if (!ready || !fileUrl || !exportId || downloadedFor.current === exportId) return;
+    downloadedFor.current = exportId;
+    const a = document.createElement("a");
+    a.href = fileUrl;
+    a.download = fileUrl.split("/").pop() ?? "export";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }, [ready, fileUrl, exportId]);
+
+  const start = (body: {
+    report_key: string;
+    params: Record<string, unknown>;
+    format: ExportFormat;
+  }) => create.mutate(body, { onSuccess: (r) => setExportId(r.export_id) });
+
+  return { start, busy, ready, failed, fileUrl };
 }
 
 /** Export manager list (rpt-export-list-be, EB2). Degrades to empty until shipped. */

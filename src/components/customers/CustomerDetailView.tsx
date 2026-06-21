@@ -35,18 +35,20 @@ import {
   StatCard,
   StatusPill,
   Table,
+  TablePagination,
   TBody,
   TD,
   TH,
   THead,
   TR,
 } from "@/components/ui";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import {
   CUSTOMERS_READ_PERMISSION,
   CUSTOMERS_SUSPEND_PERMISSION,
 } from "./permissions";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 /**
  * Customer 360 profile (CUST) — the full-page DETAIL workspace on the Commerce
@@ -488,13 +490,12 @@ export function CustomerDetailView({ id }: { id: string }) {
   );
 }
 
-/** Order history — all of the customer's orders (matched by phone), paginated 10/page. */
+/** Order history — all of the customer's orders (matched by phone), paginated via the shared footer. */
 function CustomerOrderHistory({ phone, name }: { phone: string; name: string }) {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, refetch } = useAdminOrders({ phone, page, limit: PAGE_SIZE });
   const orders = data?.data ?? [];
   const total = data?.meta.total ?? 0;
-  const hasNext = page * PAGE_SIZE < total;
 
   return (
     <Card className="overflow-hidden">
@@ -550,15 +551,12 @@ function CustomerOrderHistory({ phone, name }: { phone: string; name: string }) 
               ))}
             </TBody>
           </Table>
-          <div className="flex items-center justify-end gap-1 border-t border-border px-4 py-3">
-            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              ‹ Prev
-            </Button>
-            <span className="px-2 text-[12.5px] tabular-nums text-text-muted">Page {page}</span>
-            <Button variant="ghost" size="sm" disabled={!hasNext} onClick={() => setPage((p) => p + 1)}>
-              Next ›
-            </Button>
-          </div>
+          <TablePagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onPageChange={setPage}
+          />
         </>
       )}
     </Card>

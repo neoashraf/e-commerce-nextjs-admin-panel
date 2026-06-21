@@ -3,21 +3,27 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { auditListSchema, type AuditEntry } from "@/lib/api/schemas/audit";
+import { paginated, type PaginationMeta } from "@/lib/api/schemas/pagination";
 import { env } from "@/lib/env";
 import { getAccessToken } from "@/lib/stores/auth";
 
 /**
- * Audit-log hooks (rbac-audit-log-fe). Read-only list with filters. Export is a
+ * Audit-log hooks (rbac-audit-log-fe). Read-only paginated list with filters
+ * (`{ data, meta }` → drives the shared TablePagination footer). Export is a
  * direct authenticated download (CSV attachment) honoring the active filters.
  */
 export const auditKeys = { list: (qs: string) => ["audit", qs] as const };
+const auditPageSchema = paginated(auditListSchema);
 
 export function useAuditLog(params: Record<string, string | number | boolean | undefined>) {
   const qs = JSON.stringify(params);
   return useQuery({
     queryKey: auditKeys.list(qs),
-    queryFn: (): Promise<AuditEntry[]> =>
-      api.get("/admin/audit", { schema: auditListSchema, params }) as Promise<AuditEntry[]>,
+    queryFn: (): Promise<{ data: AuditEntry[]; meta: PaginationMeta }> =>
+      api.get("/admin/audit", { schema: auditPageSchema, params, rawEnvelope: true }) as Promise<{
+        data: AuditEntry[];
+        meta: PaginationMeta;
+      }>,
     staleTime: 15_000,
   });
 }

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { paginated, type PaginationMeta } from "@/lib/api/schemas/pagination";
 import {
   exchangeListSchema,
   exchangeDetailSchema,
@@ -11,6 +12,8 @@ import {
   type ExchangeDetail,
   type Disposition,
 } from "@/lib/api/schemas/exchanges";
+
+const exchangePageSchema = paginated(exchangeListSchema);
 
 /**
  * Admin exchange hooks (ord-exchange-admin-fe). Queue/detail reads gated by
@@ -26,11 +29,12 @@ export function useExchanges(
   const qs = JSON.stringify(params);
   return useQuery({
     queryKey: ["admin-exchanges", qs] as const,
-    queryFn: (): Promise<ExchangeRow[]> =>
+    queryFn: (): Promise<{ data: ExchangeRow[]; meta: PaginationMeta }> =>
       api.get("/admin/exchanges", {
-        schema: exchangeListSchema,
+        schema: exchangePageSchema,
         params,
-      }) as Promise<ExchangeRow[]>,
+        rawEnvelope: true,
+      }) as Promise<{ data: ExchangeRow[]; meta: PaginationMeta }>,
     staleTime: 15_000,
   });
 }

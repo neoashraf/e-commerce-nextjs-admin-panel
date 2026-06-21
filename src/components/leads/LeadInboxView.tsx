@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminLeads } from "@/lib/api/hooks/useLeadsAdmin";
 import { formatDateTime } from "@/lib/format";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import {
   Badge,
   Card,
@@ -27,7 +28,7 @@ import {
  * 15/page paginated footer backed by the API `meta.total`. Status/type filter +
  * `page` URL-reflected; rows open the thread. Presentation + pagination only.
  */
-const PAGE_SIZE = 15;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 export function LeadInboxView() {
   const router = useRouter();

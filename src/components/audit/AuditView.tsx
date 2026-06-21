@@ -5,22 +5,39 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuditLog, exportAudit } from "@/lib/api/hooks/useAudit";
 import type { AuditEntry, AuditResult } from "@/lib/api/schemas/audit";
 import { formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Input,
+  Select,
+  SkeletonRows,
+  Table,
+  TablePagination,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from "@/components/ui";
 
 /**
- * Audit log (rbac-audit-log-fe). Read-only filter bar (URL-reflected, default
- * last 30 days) + desktop table / mobile cards + a detail drawer + CSV export
- * honoring the active filters. Distinct badges for denied/failed_login
- * (icon+text, not colour-only). No create/edit/delete controls anywhere.
+ * Audit log (rbac-audit-log-fe) on the shared Data Table primitive: Card-wrapped
+ * table, eyebrow headers, distinct result badges (icon+text, not colour-only), a
+ * detail drawer, the shared TablePagination footer (DEFAULT_PAGE_SIZE/page), and a
+ * CSV export honouring the active filters. Read-only — no create/edit/delete.
  */
 const RESULT_STYLE: Record<AuditResult, { cls: string; icon: string; label: string }> = {
-  success: { cls: "bg-green-50 text-green-700", icon: "✓", label: "Success" },
-  denied: { cls: "bg-amber-50 text-amber-700", icon: "⊘", label: "Denied" },
-  failed_login: { cls: "bg-red-50 text-red-700", icon: "✕", label: "Failed login" },
-  failed: { cls: "bg-red-50 text-red-700", icon: "✕", label: "Failed" },
+  success: { cls: "bg-success-50 text-success", icon: "✓", label: "Success" },
+  denied: { cls: "bg-warning-50 text-warning", icon: "⊘", label: "Denied" },
+  failed_login: { cls: "bg-error-50 text-error", icon: "✕", label: "Failed login" },
+  failed: { cls: "bg-error-50 text-error", icon: "✕", label: "Failed" },
 };
 
 function defaultFrom(): string {
-  // Last 30 days — computed without Date.now() concerns (browser only).
   const d = new Date();
   d.setDate(d.getDate() - 30);
   return d.toISOString().slice(0, 10);
@@ -39,6 +56,7 @@ export function AuditView() {
     from: sp.get("from") ?? defaultFrom(),
     to: sp.get("to") ?? "",
   };
+  const page = Math.max(1, Number(sp.get("page")) || 1);
 
   const { data, isLoading, isError, refetch } = useAuditLog({
     actor: filters.actor || undefined,
@@ -47,9 +65,12 @@ export function AuditView() {
     result: filters.result || undefined,
     from: filters.from || undefined,
     to: filters.to || undefined,
-    page: 1,
-    limit: 50,
+    page,
+    limit: DEFAULT_PAGE_SIZE,
   });
+
+  const rows = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
 
   const [selected, setSelected] = useState<AuditEntry | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -59,6 +80,13 @@ export function AuditView() {
     const next = new URLSearchParams(sp.toString());
     if (value) next.set(key, value);
     else next.delete(key);
+    if (key !== "page") next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+  function goPage(p: number) {
+    const next = new URLSearchParams(sp.toString());
+    if (p > 1) next.set("page", String(p));
+    else next.delete("page");
     router.push(`${pathname}?${next.toString()}`);
   }
   function clearFilters() {
@@ -84,84 +112,95 @@ export function AuditView() {
     }
   }
 
-  const inp = "h-10 rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
-
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Audit log</h1>
-        <button type="button" onClick={onExport} disabled={exporting} className="inline-flex h-10 items-center rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60">
-          {exporting ? "Exporting…" : "Export CSV"}
-        </button>
+        <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">Audit log</h1>
+        <Button variant="secondary" size="sm" onClick={onExport} loading={exporting}>
+          Export CSV
+        </Button>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
-        <input className={inp} placeholder="Actor id" value={filters.actor} onChange={(e) => setParam("actor", e.target.value)} />
-        <input className={inp} placeholder="Action (e.g. orders.order.refund)" value={filters.action} onChange={(e) => setParam("action", e.target.value)} />
-        <input className={inp} placeholder="Entity type" value={filters.entity_type} onChange={(e) => setParam("entity_type", e.target.value)} />
-        <select className={inp} value={filters.result} onChange={(e) => setParam("result", e.target.value)}>
-          <option value="">All results</option>
-          <option value="success">Success</option>
-          <option value="denied">Denied</option>
-          <option value="failed_login">Failed login</option>
-        </select>
-        <label className="text-sm text-gray-600">From <input type="date" className={inp + " ml-1"} value={filters.from} onChange={(e) => setParam("from", e.target.value)} /></label>
-        <label className="text-sm text-gray-600">To <input type="date" className={inp + " ml-1"} value={filters.to} onChange={(e) => setParam("to", e.target.value)} /></label>
-        <button type="button" onClick={clearFilters} className="h-10 text-sm font-medium text-brand-700 hover:underline">Clear filters</button>
+        <div className="w-44">
+          <Input placeholder="Actor id" value={filters.actor} onChange={(e) => setParam("actor", e.target.value)} aria-label="Actor id" />
+        </div>
+        <div className="w-56">
+          <Input placeholder="Action (e.g. orders.order.refund)" value={filters.action} onChange={(e) => setParam("action", e.target.value)} aria-label="Action" />
+        </div>
+        <div className="w-44">
+          <Input placeholder="Entity type" value={filters.entity_type} onChange={(e) => setParam("entity_type", e.target.value)} aria-label="Entity type" />
+        </div>
+        <div className="w-40">
+          <Select value={filters.result} onChange={(e) => setParam("result", e.target.value)} aria-label="Result">
+            <option value="">All results</option>
+            <option value="success">Success</option>
+            <option value="denied">Denied</option>
+            <option value="failed_login">Failed login</option>
+          </Select>
+        </div>
+        <label className="flex items-center gap-1.5 text-sm text-text-muted">
+          From
+          <Input type="date" className="w-auto" value={filters.from} onChange={(e) => setParam("from", e.target.value)} aria-label="From date" />
+        </label>
+        <label className="flex items-center gap-1.5 text-sm text-text-muted">
+          To
+          <Input type="date" className="w-auto" value={filters.to} onChange={(e) => setParam("to", e.target.value)} aria-label="To date" />
+        </label>
+        <Button variant="ghost" size="sm" onClick={clearFilters}>
+          Clear filters
+        </Button>
       </div>
 
-      {exportError && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Couldn&apos;t export the log. Try again.</p>}
-
-      {isLoading ? (
-        <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
-      ) : isError ? (
-        <div className="py-12 text-center">
-          <p className="text-sm text-gray-600">Couldn&apos;t load the audit log.</p>
-          <button type="button" onClick={() => refetch()} className="mt-2 text-sm font-medium text-brand-700 hover:underline">Try again</button>
-        </div>
-      ) : !data || data.length === 0 ? (
-        <p className="py-12 text-center text-sm text-gray-500">No audit entries match your filters.</p>
-      ) : (
-        <>
-          <table className="hidden w-full text-sm lg:table">
-            <thead>
-              <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-                <th className="py-2 pr-4 font-medium">Time</th>
-                <th className="py-2 pr-4 font-medium">Actor</th>
-                <th className="py-2 pr-4 font-medium">Action</th>
-                <th className="py-2 pr-4 font-medium">Entity</th>
-                <th className="py-2 font-medium">Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((e) => (
-                <tr key={e.id} className="cursor-pointer border-b border-gray-100 hover:bg-gray-50" onClick={() => setSelected(e)}>
-                  <td className="py-3 pr-4 text-gray-500">{formatDateTime(e.created_at)}</td>
-                  <td className="py-3 pr-4 text-gray-900">{e.actor?.name ?? "System"}</td>
-                  <td className="py-3 pr-4 font-mono text-xs text-gray-700">{e.action}</td>
-                  <td className="py-3 pr-4 text-gray-600">{e.entity_type ? `${e.entity_type} ${e.entity_id ?? ""}` : "—"}</td>
-                  <td className="py-3"><ResultBadge result={e.result} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <ul className="space-y-3 lg:hidden">
-            {data.map((e) => (
-              <li key={e.id}>
-                <button type="button" onClick={() => setSelected(e)} className="w-full rounded-lg border border-gray-200 p-4 text-left">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-gray-700">{e.action}</span>
-                    <ResultBadge result={e.result} />
-                  </div>
-                  <p className="mt-1 text-sm text-gray-600">{e.actor?.name ?? "System"} · {formatDateTime(e.created_at)}</p>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
+      {exportError && (
+        <p role="alert" className="rounded-md bg-error-50 px-3 py-2 text-sm text-error">
+          Couldn’t export the log. Try again.
+        </p>
       )}
+
+      <Card className="overflow-hidden p-0">
+        {isLoading ? (
+          <SkeletonRows rows={DEFAULT_PAGE_SIZE} cols={5} />
+        ) : isError ? (
+          <ErrorState description="Couldn’t load the audit log." onRetry={() => refetch()} />
+        ) : rows.length === 0 ? (
+          <EmptyState title="No audit entries match your filters." />
+        ) : (
+          <>
+            <Table>
+              <THead>
+                <TR hover={false}>
+                  <TH>Time</TH>
+                  <TH>Actor</TH>
+                  <TH>Action</TH>
+                  <TH>Entity</TH>
+                  <TH>Result</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {rows.map((e) => (
+                  <TR key={e.id} className="cursor-pointer" onClick={() => setSelected(e)}>
+                    <TD className="whitespace-nowrap tabular-nums text-text-muted">{formatDateTime(e.created_at)}</TD>
+                    <TD className="text-text">{e.actor?.name ?? "System"}</TD>
+                    <TD className="font-mono text-xs">{e.action}</TD>
+                    <TD>{e.entity_type ? `${e.entity_type} ${e.entity_id ?? ""}` : "—"}</TD>
+                    <TD>
+                      <ResultBadge result={e.result} />
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            <TablePagination
+              page={page}
+              pageSize={DEFAULT_PAGE_SIZE}
+              total={total}
+              onPageChange={goPage}
+            />
+          </>
+        )}
+      </Card>
 
       {selected && <DetailDrawer entry={selected} onClose={() => setSelected(null)} />}
     </div>
@@ -170,7 +209,12 @@ export function AuditView() {
 
 function ResultBadge({ result }: { result: AuditResult }) {
   const s = RESULT_STYLE[result];
-  return <span className={"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " + s.cls}><span aria-hidden>{s.icon}</span>{s.label}</span>;
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", s.cls)}>
+      <span aria-hidden>{s.icon}</span>
+      {s.label}
+    </span>
+  );
 }
 
 function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => void }) {
@@ -178,10 +222,22 @@ function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => vo
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
-      <div role="dialog" aria-modal="true" aria-label="Audit entry" className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-          <h2 className="text-base font-semibold text-gray-900">Audit entry</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-gray-500 hover:bg-gray-100">✕</button>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Audit entry"
+        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-surface shadow-xl"
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 className="text-base font-semibold text-text">Audit entry</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-9 w-9 place-items-center rounded-full text-text-muted hover:bg-surface-subtle"
+          >
+            ✕
+          </button>
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4 text-sm">
           <Row label="Action" value={entry.action} mono />
@@ -192,10 +248,16 @@ function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => vo
           <Row label="Time" value={formatDateTime(entry.created_at)} />
           <div>
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Summary</p>
-              <button type="button" onClick={() => navigator.clipboard?.writeText(raw)} className="text-xs font-medium text-brand-700 hover:underline">Copy</button>
+              <p className="text-eyebrow uppercase tracking-wide text-text-faint">Summary</p>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(raw)}
+                className="text-xs font-medium text-accent-700 hover:underline"
+              >
+                Copy
+              </button>
             </div>
-            <pre className="mt-1 max-h-72 overflow-auto rounded-md bg-gray-50 p-3 text-xs text-gray-700">{raw}</pre>
+            <pre className="mt-1 max-h-72 overflow-auto rounded-md bg-surface-subtle p-3 text-xs text-text-secondary">{raw}</pre>
           </div>
         </div>
       </div>
@@ -206,8 +268,8 @@ function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => vo
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</p>
-      <p className={"text-gray-800 " + (mono ? "font-mono text-xs" : "")}>{value}</p>
+      <p className="text-eyebrow uppercase tracking-wide text-text-faint">{label}</p>
+      <p className={cn("text-text-secondary", mono && "font-mono text-xs")}>{value}</p>
     </div>
   );
 }

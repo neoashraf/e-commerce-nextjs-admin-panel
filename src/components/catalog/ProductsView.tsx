@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api/errors";
 import { formatBDT } from "@/lib/format";
 import { resolveMediaUrl } from "@/lib/media";
 import { toast } from "@/lib/stores/toast";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Badge,
@@ -38,7 +39,7 @@ import {
  * actions (publish/archive/delete) with NOT_PUBLISHABLE (422) + PRODUCT_IN_ORDER
  * (409) guards. Behaviour unchanged — presentation + pagination only.
  */
-const PAGE_SIZE = 15;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 export function ProductsView() {
   const router = useRouter();

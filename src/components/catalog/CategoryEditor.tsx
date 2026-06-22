@@ -265,8 +265,9 @@ export function CategoryEditor({
 
   return (
     <form onSubmit={onSave}>
-      {/* A. Sticky title bar */}
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-5 border-b border-border bg-surface px-4 py-3.5 md:-mx-6 md:-mt-6 md:px-6">
+      {/* A. Sticky title bar — inset within the shell's padded scroll area (no vertical
+          bleed, which would overlap the General card when pinned). */}
+      <div className="sticky top-0 z-30 -mx-4 mb-5 rounded-b-xl border-b border-border bg-surface px-4 py-3.5 shadow-sm md:-mx-6 md:px-6">
         <nav className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
           <span>Catalog</span>
           <ChevronRight className="h-3.5 w-3.5 text-text-faint" />
@@ -520,8 +521,8 @@ export function CategoryEditor({
         </aside>
       </div>
 
-      {/* F. Sticky save bar */}
-      <div className="sticky bottom-0 z-20 -mx-4 -mb-4 mt-6 border-t border-border bg-surface px-4 py-3 shadow-[0_-2px_6px_-2px_rgba(16,24,40,0.06)] md:-mx-6 md:-mb-6 md:px-6">
+      {/* F. Sticky save bar — inset within the shell's padded scroll area. */}
+      <div className="sticky bottom-0 z-30 -mx-4 mt-6 rounded-t-xl border-t border-border bg-surface px-4 py-3 shadow-[0_-2px_6px_-2px_rgba(16,24,40,0.10)] md:-mx-6 md:px-6">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             {dirty ? (

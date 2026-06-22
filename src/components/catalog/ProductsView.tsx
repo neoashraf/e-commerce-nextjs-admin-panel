@@ -1,12 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
-import { useProducts, useProductStatus, useDeleteProduct, useFamilies } from "@/lib/api/hooks/useCatalog";
-import type { ProductRow } from "@/lib/api/schemas/catalog";
+import { Download, Search } from "lucide-react";
+import {
+  useProducts,
+  useProductStatus,
+  useDeleteProduct,
+  useFamilies,
+  useCategoryTree,
+  useBulkProductStatus,
+  useExportProducts,
+} from "@/lib/api/hooks/useCatalog";
+import type { BulkStatusResult, CategoryNode, ProductRow, QtyStatus } from "@/lib/api/schemas/catalog";
 import { Can } from "@/lib/permissions/Can";
+import { usePermissions } from "@/lib/permissions/usePermissions";
 import { ApiError } from "@/lib/api/errors";
 import { formatBDT } from "@/lib/format";
 import { resolveMediaUrl } from "@/lib/media";
@@ -15,6 +24,8 @@ import { usePageParams } from "@/lib/usePageParams";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Badge,
+  type BadgeTone,
+  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -31,13 +42,41 @@ import {
   TR,
 } from "@/components/ui";
 
+/** qty_status → label + badge tone (label, never colour-only — a11y §10). */
+const QTY_STATUS: Record<QtyStatus, { label: string; tone: BadgeTone }> = {
+  in_stock: { label: "In stock", tone: "success" },
+  low_stock: { label: "Low", tone: "warning" },
+  out_of_stock: { label: "Out", tone: "error" },
+};
+
+/** Flatten the category tree into indented <option>s for the filter select. */
+function flattenCategories(nodes: CategoryNode[], depth = 0): Array<{ id: string; label: string }> {
+  return nodes.flatMap((n) => [
+    { id: n.id, label: `${"  ".repeat(depth)}${n.name}` },
+    ...flattenCategories(n.children ?? [], depth + 1),
+  ]);
+}
+
+/** Human-readable reason for a per-item bulk failure (FR-CAT-015). */
+function failureReason(code?: string, details?: string[]): string {
+  if (code === "NOT_PUBLISHABLE") {
+    const needs = (details ?? []).map((d) =>
+      d.startsWith("missing_required_attributes:")
+        ? `missing ${d.split(":")[1]}`
+        : d.replace(/_/g, " "),
+    );
+    return needs.length ? `can't publish — ${needs.join(", ")}` : "can't publish yet";
+  }
+  if (code === "PRODUCT_NOT_FOUND") return "no longer exists";
+  return code ? code.toLowerCase().replace(/_/g, " ") : "failed";
+}
+
 /**
- * Products list (products-list.md, catalog-products-list-fe) on the AD6 Data Table
- * primitive (design-system §8.6): Card-wrapped table, eyebrow headers, StatusPill,
- * right-aligned numerics, and a 15/page paginated footer backed by the API
- * `meta.total`. URL-reflected search + status/family/type filters + `page`; row
- * actions (publish/archive/delete) with NOT_PUBLISHABLE (422) + PRODUCT_IN_ORDER
- * (409) guards. Behaviour unchanged — presentation + pagination only.
+ * Products list (products-list.md, catalog-products-list-redesign-fe) on the AD6 Data Table
+ * primitive: Card-wrapped table with eyebrow headers, StatusPill, struck base + sale price,
+ * a live INV stock-status cell, an Export (CSV) action, a bulk publish/archive bar, and
+ * URL-reflected search + status/family/category/type filters + paginated footer. Row actions
+ * (publish/archive/delete) keep their NOT_PUBLISHABLE (422) + PRODUCT_IN_ORDER (409) guards.
  */
 export function ProductsView() {
   const router = useRouter();
@@ -45,20 +84,34 @@ export function ProductsView() {
   const sp = useSearchParams();
   const status = sp.get("status") ?? "";
   const family = sp.get("family") ?? "";
+  const category = sp.get("category") ?? "";
   const type = sp.get("type") ?? "";
   const q = sp.get("q") ?? "";
   const { page, pageSize, setPage, setPageSize } = usePageParams();
+  const { can } = usePermissions();
+  const canUpdate = can("catalog.product.update");
 
   const { data, isLoading, isError, refetch } = useProducts({
-    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, page, limit: pageSize,
+    q: q || undefined, status: status || undefined, family: family || undefined,
+    category: category || undefined, type: type || undefined, page, limit: pageSize,
   });
   const { data: families } = useFamilies();
+  const { data: categoryTree } = useCategoryTree();
   const statusM = useProductStatus();
   const del = useDeleteProduct();
+  const bulkM = useBulkProductStatus();
+  const exportM = useExportProducts();
   const [confirm, setConfirm] = useState<{ kind: "archive" | "delete"; product: ProductRow } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkResult, setBulkResult] = useState<BulkStatusResult | null>(null);
 
-  const rows = data?.data ?? [];
+  const rows = useMemo(() => data?.data ?? [], [data]);
   const total = data?.meta.total ?? 0;
+  const categoryOptions = useMemo(() => flattenCategories(categoryTree ?? []), [categoryTree]);
+  const nameById = useMemo(() => new Map(rows.map((r) => [r.id, r.name])), [rows]);
+
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  const someSelected = rows.some((r) => selected.has(r.id));
 
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(sp.toString());
@@ -67,13 +120,53 @@ export function ProductsView() {
     router.push(`${pathname}?${next.toString()}`);
   }
 
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected((prev) => (rows.every((r) => prev.has(r.id)) ? new Set() : new Set(rows.map((r) => r.id))));
+  }
+  function clearSelection() {
+    setSelected(new Set());
+    setBulkResult(null);
+  }
+
+  async function runBulk(next: "published" | "archived") {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    try {
+      const res = await bulkM.mutateAsync({ ids, status: next });
+      setSelected(new Set());
+      setBulkResult(res);
+      const verb = next === "published" ? "published" : "archived";
+      if (res.failed === 0) {
+        toast(`${res.succeeded} ${res.succeeded === 1 ? "product" : "products"} ${verb}.`);
+      } else {
+        toast(`${res.succeeded} ${verb}, ${res.failed} failed. See the summary above.`, "error");
+      }
+    } catch {
+      toast("Couldn't update the selected products. Try again.", "error");
+    }
+  }
+
+  function onExport() {
+    exportM.mutate(
+      { q: q || undefined, status: status || undefined, family: family || undefined, category: category || undefined, type: type || undefined },
+      { onError: () => toast("Couldn't export products. Try again.", "error") },
+    );
+  }
+
   async function publish(p: ProductRow) {
     try {
       await statusM.mutateAsync({ id: p.id, status: "published" });
       toast("Product published.");
     } catch (err) {
       if (err instanceof ApiError && err.code === "NOT_PUBLISHABLE") {
-        toast("Can't publish yet — add an image, an enabled variant, and required attributes first.", "error");
+        toast("Can't publish — add a primary image, enable at least one variant, and set required attributes.", "error");
       } else {
         toast("Couldn't publish. Try again.", "error");
       }
@@ -100,18 +193,29 @@ export function ProductsView() {
     }
   }
 
+  const cols = canUpdate ? 8 : 7;
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-[22px] font-bold leading-7 text-text">Products</h1>
-        <Can permission="catalog.product.create">
-          <Link
-            href="/admin/products/new"
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent-600 px-4 text-sm font-medium text-accent-fg shadow-xs transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-2"
-          >
-            Create product
-          </Link>
-        </Can>
+        <div>
+          <h1 className="text-[22px] font-bold leading-7 text-text">Products</h1>
+          {!isLoading && !isError && <p className="text-sm text-text-muted">{total} {total === 1 ? "result" : "results"}</p>}
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" onClick={onExport} disabled={exportM.isPending}>
+            <Download className="h-4 w-4" />
+            {exportM.isPending ? "Exporting…" : "Export"}
+          </Button>
+          <Can permission="catalog.product.create">
+            <Link
+              href="/admin/products/new"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent-600 px-4 text-sm font-medium text-accent-fg shadow-xs transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-2"
+            >
+              Create product
+            </Link>
+          </Can>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -138,6 +242,12 @@ export function ProductsView() {
             {families?.map((f) => <option key={f.id} value={f.code}>{f.name}</option>)}
           </Select>
         </div>
+        <div className="w-48">
+          <Select aria-label="Category" value={category} onChange={(e) => setParam("category", e.target.value)}>
+            <option value="">All categories</option>
+            {categoryOptions.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </Select>
+        </div>
         <div className="w-40">
           <Select aria-label="Type" value={type} onChange={(e) => setParam("type", e.target.value)}>
             <option value="">All types</option>
@@ -147,18 +257,52 @@ export function ProductsView() {
         </div>
       </div>
 
+      {bulkResult && bulkResult.failed > 0 && (
+        <div className="rounded-md border border-error/40 bg-error-50 px-4 py-3 text-sm" role="status">
+          <p className="font-medium text-text">{bulkResult.succeeded} succeeded · {bulkResult.failed} failed</p>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-text-secondary">
+            {bulkResult.results.filter((r) => !r.ok).map((r) => (
+              <li key={r.id}>
+                <span className="font-medium text-text">{nameById.get(r.id) ?? r.id}</span> — {failureReason(r.code, r.details)}
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={() => setBulkResult(null)} className="mt-2 text-xs font-medium text-text-muted hover:text-text">Dismiss</button>
+        </div>
+      )}
+
       <Card>
         {isLoading ? (
-          <SkeletonRows rows={10} cols={7} />
+          <SkeletonRows rows={10} cols={cols} />
         ) : isError ? (
           <ErrorState description="Couldn't load products." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
-          <EmptyState title="No products match your filters." description="Try clearing search or widening the filters." />
+          <EmptyState title="No products match these filters." description="Try clearing search or widening the filters." />
         ) : (
           <>
+            {canUpdate && selected.size > 0 && (
+              <div className="flex items-center gap-3 border-b border-border bg-surface-subtle px-4 py-2.5 text-sm">
+                <span className="font-medium text-text">{selected.size} selected</span>
+                <Button size="sm" variant="secondary" onClick={() => runBulk("published")} disabled={bulkM.isPending}>Publish</Button>
+                <Button size="sm" variant="secondary" onClick={() => runBulk("archived")} disabled={bulkM.isPending}>Archive</Button>
+                <button type="button" onClick={clearSelection} className="ml-auto text-text-muted hover:text-text">Clear</button>
+              </div>
+            )}
             <Table>
               <THead>
                 <TR hover={false}>
+                  {canUpdate && (
+                    <TH className="w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all products on this page"
+                        checked={allSelected}
+                        ref={(el) => { if (el) el.indeterminate = !allSelected && someSelected; }}
+                        onChange={toggleAll}
+                        className="h-4 w-4 rounded border-border text-accent-600 focus-visible:ring-2 focus-visible:ring-accent-600"
+                      />
+                    </TH>
+                  )}
                   <TH>Product</TH>
                   <TH numeric>Price</TH>
                   <TH numeric>Qty</TH>
@@ -171,6 +315,17 @@ export function ProductsView() {
               <TBody>
                 {rows.map((p) => (
                   <TR key={p.id}>
+                    {canUpdate && (
+                      <TD className="w-10">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${p.name}`}
+                          checked={selected.has(p.id)}
+                          onChange={() => toggleOne(p.id)}
+                          className="h-4 w-4 rounded border-border text-accent-600 focus-visible:ring-2 focus-visible:ring-accent-600"
+                        />
+                      </TD>
+                    )}
                     <TD>
                       <div className="flex items-center gap-3">
                         <span className="h-10 w-10 shrink-0 overflow-hidden rounded bg-surface-subtle">
@@ -185,8 +340,28 @@ export function ProductsView() {
                         </span>
                       </div>
                     </TD>
-                    <TD numeric className="text-text">{p.base_price ? formatBDT(Number(p.base_price)) : "—"}</TD>
-                    <TD numeric>{p.qty == null ? <span title="Stock unavailable" className="text-text-faint">—</span> : p.qty}</TD>
+                    <TD numeric className="text-text">
+                      {p.base_price ? (
+                        p.sale_active && p.sale_price ? (
+                          <span className="inline-flex items-center justify-end gap-2">
+                            <span className="text-text-muted line-through">{formatBDT(Number(p.base_price))}</span>
+                            <span className="font-medium text-text">{formatBDT(Number(p.sale_price))}</span>
+                          </span>
+                        ) : (
+                          formatBDT(Number(p.base_price))
+                        )
+                      ) : "—"}
+                    </TD>
+                    <TD numeric>
+                      {p.qty == null ? (
+                        <span title="Stock unavailable — couldn't reach Inventory." className="text-text-faint">—</span>
+                      ) : (
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <span className="text-text">{p.qty}</span>
+                          {p.qty_status && <Badge tone={QTY_STATUS[p.qty_status].tone}>{QTY_STATUS[p.qty_status].label}</Badge>}
+                        </span>
+                      )}
+                    </TD>
                     <TD><StatusPill status={p.status} /></TD>
                     <TD>{p.primary_category ?? "—"}</TD>
                     <TD><Badge tone="neutral">{p.type ?? "simple"}</Badge></TD>
@@ -214,7 +389,7 @@ export function ProductsView() {
       <ConfirmDialog
         open={!!confirm}
         title={confirm?.kind === "archive" ? "Archive product?" : "Delete product?"}
-        message={confirm?.kind === "archive" ? `"${confirm?.product.name}" will be hidden from the storefront but kept for order history.` : `"${confirm?.product.name}" will be deleted.`}
+        message={confirm?.kind === "archive" ? `"${confirm?.product.name}" will be hidden from the storefront but kept for order history.` : `"${confirm?.product.name}" can't be undone.`}
         confirmLabel={confirm?.kind === "archive" ? "Archive" : "Delete"}
         danger
         pending={statusM.isPending || del.isPending}

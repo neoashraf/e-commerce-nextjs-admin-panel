@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { PAGE_SIZE_OPTIONS } from "@/lib/constants";
 
 /**
  * The one data table (design-system §8.6). Composable, real <table> semantics:
@@ -140,55 +141,126 @@ export function TableTotalsRow({
   );
 }
 
-/** Footer: "Showing X–Y of N" + prev/next pager. */
+/** A compact page window like [1, "…", 4, 5, 6, "…", 12]. */
+function pageWindow(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out: (number | "…")[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) out.push("…");
+  for (let p = start; p <= end; p++) out.push(p);
+  if (end < total - 1) out.push("…");
+  out.push(total);
+  return out;
+}
+
+/**
+ * Footer (design-system §8.6): "Showing X–Y of N" (left) + a rows-per-page select
+ * and a numbered, ellipsis-compressed pager with prev/next (right). The select renders
+ * only when `onPageSizeChange` is provided. Wraps to two rows on narrow widths.
+ */
 export function TablePagination({
   page,
   pageSize,
   total,
   onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
   className,
 }: {
   page: number;
   pageSize: number;
   total: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  pageSizeOptions?: readonly number[];
   className?: string;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
+  const pages = pageWindow(page, totalPages);
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 border-t border-border px-4 py-3 text-sm text-text-muted",
+        "flex flex-col gap-3 border-t border-border px-4 py-3 text-sm text-text-muted sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
       <span className="tabular-nums">
         Showing {from}–{to} of {total}
       </span>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page <= 1}
-          aria-label="Previous page"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <span className="px-2 tabular-nums">
-          {page} / {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages}
-          aria-label="Next page"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
-        >
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        {onPageSizeChange && (
+          <label className="flex items-center gap-2 whitespace-nowrap">
+            Rows per page
+            <div className="relative">
+              <select
+                value={pageSize}
+                onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                aria-label="Rows per page"
+                className="h-8 appearance-none rounded-md border border-border-strong bg-surface pl-2.5 pr-7 text-sm tabular-nums text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
+              >
+                {pageSizeOptions.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+                aria-hidden="true"
+              />
+            </div>
+          </label>
+        )}
+        <nav aria-label="Pagination" className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+            aria-label="Previous page"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          </button>
+          {pages.map((p, i) =>
+            p === "…" ? (
+              <span
+                key={`gap-${i}`}
+                className="px-1.5 text-text-faint"
+                aria-hidden="true"
+              >
+                …
+              </span>
+            ) : (
+              <button
+                key={p}
+                type="button"
+                onClick={() => onPageChange(p)}
+                aria-current={p === page ? "page" : undefined}
+                aria-label={`Page ${p}`}
+                className={cn(
+                  "inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm font-medium tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
+                  p === page
+                    ? "bg-accent-600 text-accent-fg"
+                    : "text-text-secondary hover:bg-surface-subtle",
+                )}
+              >
+                {p}
+              </button>
+            ),
+          )}
+          <button
+            type="button"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
+            aria-label="Next page"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+          >
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </nav>
       </div>
     </div>
   );

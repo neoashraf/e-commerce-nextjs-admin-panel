@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api/errors";
 import { formatBDT } from "@/lib/format";
 import { resolveMediaUrl } from "@/lib/media";
 import { toast } from "@/lib/stores/toast";
+import { usePageParams } from "@/lib/usePageParams";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Badge,
@@ -38,8 +39,6 @@ import {
  * actions (publish/archive/delete) with NOT_PUBLISHABLE (422) + PRODUCT_IN_ORDER
  * (409) guards. Behaviour unchanged — presentation + pagination only.
  */
-const PAGE_SIZE = 15;
-
 export function ProductsView() {
   const router = useRouter();
   const pathname = usePathname();
@@ -48,10 +47,10 @@ export function ProductsView() {
   const family = sp.get("family") ?? "";
   const type = sp.get("type") ?? "";
   const q = sp.get("q") ?? "";
-  const page = Math.max(1, Number(sp.get("page") ?? "1") || 1);
+  const { page, pageSize, setPage, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useProducts({
-    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, page, limit: PAGE_SIZE,
+    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, page, limit: pageSize,
   });
   const { data: families } = useFamilies();
   const statusM = useProductStatus();
@@ -207,7 +206,7 @@ export function ProductsView() {
                 ))}
               </TBody>
             </Table>
-            <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(p) => setParam("page", String(p))} />
+            <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         )}
       </Card>

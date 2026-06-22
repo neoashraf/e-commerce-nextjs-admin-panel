@@ -12,25 +12,21 @@ const STATUS_OPTIONS: { value: "" | StockStatus; label: string; dot?: string }[]
   { value: "out_of_stock", label: "Out", dot: "bg-error" },
 ];
 
-const LIMIT_OPTIONS = [20, 50, 100];
-
 /**
- * Search + status SegmentedControl + per-page filter bar (design Stock toolbar,
- * §8.2). All state lives in the URL (shareable/restorable); search is debounced
- * ~300ms before committing. Re-skinned to the design tokens.
+ * Search + status SegmentedControl filter bar (design Stock toolbar, §8.2). All
+ * state lives in the URL (shareable/restorable); search is debounced ~300ms before
+ * committing. Rows-per-page now lives in the shared table footer (AD7), not here.
  */
 export function StockFilters({
   q,
   status,
-  limit,
   resultLabel,
   onChange,
 }: {
   q: string;
   status: string;
-  limit: number;
   resultLabel?: string;
-  onChange: (patch: { q?: string; status?: string; limit?: string; page?: string }) => void;
+  onChange: (patch: { q?: string; status?: string; page?: string }) => void;
 }) {
   const [search, setSearch] = useState(q);
 
@@ -99,21 +95,6 @@ export function StockFilters({
           {resultLabel}
         </span>
       )}
-
-      <label className="flex items-center gap-2 text-sm text-text-muted">
-        Per page
-        <select
-          className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm tabular-nums text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
-          value={limit}
-          onChange={(e) => onChange({ limit: e.target.value, page: undefined })}
-        >
-          {LIMIT_OPTIONS.map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
-      </label>
     </div>
   );
 }

@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Calendar, Download, Search, UserRound, Users } from "lucide-react";
-import { useCustomers, customerRowSchema, type CustomerRow } from "@/lib/api/hooks/useCustomers";
-import { fetchAllRows, buildCsv, downloadCsv, todayStamp } from "@/lib/exportCsv";
+import { useCustomersPage } from "@/lib/api/hooks/useCustomers";
+import { useAsyncExport } from "@/lib/api/hooks/reports";
+import { usePageParams } from "@/lib/usePageParams";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { formatBDT, formatDate } from "@/lib/format";
@@ -22,6 +22,7 @@ import {
   SkeletonRows,
   StatusPill,
   Table,
+  TablePagination,
   TBody,
   TD,
   TH,
@@ -29,6 +30,7 @@ import {
   TR,
 } from "@/components/ui";
 import { CustomerExportModal } from "./CustomerExportModal";
+import { TagChips, CUSTOMER_TAG_OPTIONS } from "./TagChips";
 import { CUSTOMERS_EXPORT_PERMISSION, CUSTOMERS_READ_PERMISSION } from "./permissions";
 
 /**
@@ -77,16 +79,16 @@ function activityParams(a: string): Record<string, string> {
   }
 }
 
-/** Exportable columns (label → cell value) for the client-side CSV. */
-const EXPORT_FIELD_VALUE: Record<string, (c: CustomerRow) => string> = {
-  Name: (c) => c.name ?? "",
-  Phone: (c) => c.phone ?? "",
-  Email: (c) => c.email ?? "",
-  Status: (c) => STATUS_LABEL[c.status] ?? c.status,
-  Orders: (c) => String(c.order_count ?? 0),
-  "Total spent": (c) => c.total_spent ?? "",
-  "Last order": (c) => c.last_order_at ?? "",
-  "Customer ID": (c) => c.id,
+/** Modal field label → backend customer-directory column key (the `customers_list` export). */
+const EXPORT_FIELD_KEY: Record<string, string> = {
+  Name: "full_name",
+  Phone: "phone",
+  Email: "email",
+  Status: "status",
+  Orders: "order_count",
+  "Total spent": "total_spent",
+  "Last order": "last_order_at",
+  "Customer ID": "customer_id",
 };
 
 function initials(name: string): string {
@@ -113,71 +115,69 @@ export function CustomersView() {
   const registeredFrom = sp.get("registered_from") ?? "";
   const registeredTo = sp.get("registered_to") ?? "";
   const includeGuests = sp.get("include_guests") === "1";
+  const tag = sp.get("tag") ?? "";
+  const page = Math.max(1, Number(sp.get("page")) || 1);
+  const { pageSize, setPageSize } = usePageParams();
 
-  const { data, isLoading, isError, refetch } = useCustomers({
+  const { data, isLoading, isError, refetch } = useCustomersPage({
     q: q || undefined,
     status: status || undefined,
+    tag: tag || undefined,
     ...activityParams(activity),
     registration_from: ddmmyyyyToIso(registeredFrom),
     registration_to: ddmmyyyyToIso(registeredTo),
     include_guests: includeGuests ? "true" : undefined,
-    page: 1,
-    limit: 200,
+    page,
+    limit: pageSize,
   });
 
   const [exportOpen, setExportOpen] = useState(false);
-  const rows = useMemo(() => data ?? [], [data]);
+  const rows = useMemo(() => data?.data ?? [], [data]);
+  const total = data?.meta.total ?? 0;
 
+  /** Filter changes reset to page 1 so we never land on an out-of-range page. */
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(sp.toString());
     if (value) next.set(key, value);
     else next.delete(key);
+    if (key !== "page") next.delete("page");
     router.push(`${pathname}?${next.toString()}`);
   }
 
-  const [exporting, setExporting] = useState(false);
+  function goPage(p: number) {
+    const next = new URLSearchParams(sp.toString());
+    if (p > 1) next.set("page", String(p));
+    else next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
+  const { start: startExport, busy: exporting } = useAsyncExport();
 
   /**
-   * Client-side CSV (honours the modal's field selection). Fetches EVERY page of the current filtered
-   * view — not just the loaded list page — then serializes + downloads in the browser. Replaces the
-   * async export pipeline so the file is produced reliably without a backend job.
+   * Customer-directory CSV via the async reports-export pipeline (POST /admin/reports/export, report
+   * `customers_list`), so the file is tracked in the Exports manager (MANAGE › Exports) and auto-downloads
+   * when ready. Honours the modal's field selection (sent as `fields`) and the current list filters
+   * (q / status / last-order range).
    */
-  async function confirmExport(fields: string[]) {
+  function confirmExport(fields: string[]) {
     setExportOpen(false);
-    const cols = fields.filter((f) => EXPORT_FIELD_VALUE[f]);
+    const cols = fields.map((f) => EXPORT_FIELD_KEY[f]).filter(Boolean);
     if (cols.length === 0) {
       toast("Select at least one field to export.", "info");
       return;
     }
-    setExporting(true);
-    try {
-      const all = await fetchAllRows(
-        "/admin/customers",
-        {
-          q: q || undefined,
-          status: status || undefined,
-          ...activityParams(activity),
-          registration_from: ddmmyyyyToIso(registeredFrom),
-          registration_to: ddmmyyyyToIso(registeredTo),
-          include_guests: includeGuests ? "true" : undefined,
-        },
-        z.array(customerRowSchema),
-      );
-      if (all.length === 0) {
-        toast("Nothing to export for the current filter.", "info");
-        return;
-      }
-      const csv = buildCsv(cols, all.map((c) => cols.map((f) => EXPORT_FIELD_VALUE[f](c))));
-      downloadCsv(`customers-${todayStamp()}.csv`, csv);
-      toast(`Exported ${all.length} customer${all.length === 1 ? "" : "s"} to CSV.`);
-    } catch {
-      toast("Export failed. Try again.", "error");
-    } finally {
-      setExporting(false);
-    }
+    const params: Record<string, unknown> = { fields: cols, ...activityParams(activity) };
+    if (q) params.q = q;
+    if (status) params.status = status;
+    const regFrom = ddmmyyyyToIso(registeredFrom);
+    const regTo = ddmmyyyyToIso(registeredTo);
+    if (regFrom) params.registration_from = regFrom;
+    if (regTo) params.registration_to = regTo;
+    startExport({ report_key: "customers_list", params, format: "csv" });
+    toast("Preparing your CSV — it’ll download and appear in Exports.");
   }
 
-  const resultCount = rows.length;
+  const resultCount = total;
   const hasFilters = !!(q || status || activity || registeredFrom || registeredTo);
 
   if (ready && !can(CUSTOMERS_READ_PERMISSION)) {
@@ -241,6 +241,21 @@ export function CustomersView() {
             <option value="locked">Locked</option>
             <option value="suspended">Suspended</option>
             <option value="deleted">Deleted</option>
+          </Select>
+        </div>
+
+        <div className="w-36">
+          <Select
+            aria-label="Filter by tag"
+            value={tag}
+            onChange={(e) => setParam("tag", e.target.value)}
+          >
+            <option value="">All tags</option>
+            {CUSTOMER_TAG_OPTIONS.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.label}
+              </option>
+            ))}
           </Select>
         </div>
 
@@ -330,7 +345,7 @@ export function CustomersView() {
       {/* ===== TABLE CARD ===== */}
       <Card className="overflow-hidden p-0">
         {isLoading ? (
-          <SkeletonRows rows={8} cols={6} />
+          <SkeletonRows rows={8} cols={8} />
         ) : isError ? (
           <ErrorState description="Couldn’t load customers." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
@@ -342,6 +357,7 @@ export function CustomersView() {
             }
           />
         ) : (
+          <>
           <div className="overflow-x-auto">
             <Table className="min-w-[860px]">
               <caption className="sr-only">Customers. {resultCount} shown.</caption>
@@ -351,6 +367,7 @@ export function CustomersView() {
                   <TH>Phone</TH>
                   <TH>Email</TH>
                   <TH>Status</TH>
+                  <TH>Tags</TH>
                   <TH numeric>Orders</TH>
                   <TH numeric>Total spent</TH>
                   <TH>Last order</TH>
@@ -402,6 +419,9 @@ export function CustomersView() {
                       <TD>
                         <StatusPill status={c.status} label={STATUS_LABEL[c.status] ?? undefined} />
                       </TD>
+                      <TD>
+                        <TagChips tags={c.tags} max={2} />
+                      </TD>
                       <TD numeric className="text-[13px] text-text-secondary">
                         {orders}
                       </TD>
@@ -422,6 +442,14 @@ export function CustomersView() {
               </TBody>
             </Table>
           </div>
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={goPage}
+            onPageSizeChange={setPageSize}
+          />
+          </>
         )}
       </Card>
 

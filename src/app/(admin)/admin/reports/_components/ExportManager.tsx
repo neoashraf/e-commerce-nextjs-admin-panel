@@ -54,13 +54,29 @@ import type {
 const REPORT_ICON: Record<string, LucideIcon> = {
   sales: TrendingUp,
   orders: ShoppingCart,
+  orders_list: ShoppingCart,
   products: Package,
   inventory: Boxes,
   customers: Users,
+  customers_list: Users,
   payments: CreditCard,
   promotions: Tag,
   search: Search,
 };
+
+/**
+ * Labels for export-only report keys that aren't in the viewable report catalog (they're produced by the
+ * list pages, not a Reports viewer): `orders_list` (Orders directory) and `customers_list` (Customers
+ * directory). Falls through to the catalog label, then the raw key.
+ */
+const EXPORT_KEY_LABEL: Record<string, string> = {
+  orders_list: "Orders",
+  customers_list: "Customers",
+};
+
+function reportLabel(key: string): string {
+  return EXPORT_KEY_LABEL[key] ?? getReportMeta(key)?.label ?? key;
+}
 
 const STATUS_META: Record<ExportStatus, { label: string; pill: string; dot: string }> = {
   processing: { label: "Processing", pill: "bg-info-50 text-info", dot: "bg-info" },
@@ -242,7 +258,7 @@ export function ExportManager() {
               <option value="all">All reports</option>
               {reportOptions.map((key) => (
                 <option key={key} value={key}>
-                  {getReportMeta(key)?.label ?? key}
+                  {reportLabel(key)}
                 </option>
               ))}
             </Select>
@@ -305,7 +321,7 @@ export function ExportManager() {
                           <Icon className="h-4 w-4" aria-hidden="true" />
                         </span>
                         <span className="font-semibold text-text">
-                          {getReportMeta(r.report_key)?.label ?? r.report_key}
+                          {reportLabel(r.report_key)}
                         </span>
                       </span>
                     </TD>
@@ -329,6 +345,14 @@ export function ExportManager() {
                     </TD>
                     <TD>
                       <StatusPill status={r.status} />
+                      {r.status === "failed" && r.error_reason && (
+                        <p
+                          className="mt-0.5 max-w-[220px] truncate text-[11px] text-error"
+                          title={r.error_reason}
+                        >
+                          {r.error_reason}
+                        </p>
+                      )}
                     </TD>
                     <TD
                       className={cn(
@@ -349,6 +373,9 @@ export function ExportManager() {
                           download
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={() =>
+                            toast(`Downloading ${reportLabel(r.report_key)} export…`)
+                          }
                           className={cn(
                             actionBase,
                             "border border-border-strong bg-surface text-text hover:bg-surface-subtle",

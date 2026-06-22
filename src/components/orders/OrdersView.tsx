@@ -16,6 +16,7 @@ import {
   SkeletonRows,
   StatusPill,
   Table,
+  TablePagination,
   Tabs,
   TBody,
   TD,
@@ -24,16 +25,15 @@ import {
   TR,
   type TabItem,
 } from "@/components/ui";
+import { usePageParams } from "@/lib/usePageParams";
 
 /**
  * Admin orders list (ord-admin-fe) — LIST archetype on the AD0 Table.
  * Status is a Tab bar (All + lifecycle statuses; Exchanges live on their own page,
  * so there is no Exchanges tab). Search + payment-state + date-range filters are
- * URL-reflected. Paginated 15/page (Prev/Next; no total count shown). Rows open the
- * order detail drawer (AD3). Presentation + pagination only — data layer unchanged.
+ * URL-reflected. Paginated via the shared TablePagination footer (DEFAULT_PAGE_SIZE/page,
+ * "Showing X–Y of N"). Rows open the order detail drawer (AD3). Presentation only.
  */
-const PAGE_SIZE = 15;
-
 /** Status tabs — lifecycle statuses only; no Exchanges tab (separate module). */
 const STATUS_TABS: TabItem[] = [
   { key: "all", label: "All" },
@@ -46,9 +46,6 @@ const STATUS_TABS: TabItem[] = [
   { key: "refunded", label: "Refunded" },
 ];
 
-const pagerBtn =
-  "inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-text-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600";
-
 export function OrdersView() {
   const router = useRouter();
   const pathname = usePathname();
@@ -59,6 +56,7 @@ export function OrdersView() {
   const from = sp.get("from") ?? "";
   const to = sp.get("to") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
+  const { pageSize, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useAdminOrders({
     status: status || undefined,
@@ -67,12 +65,11 @@ export function OrdersView() {
     from: from || undefined,
     to: to || undefined,
     page,
-    limit: PAGE_SIZE,
+    limit: pageSize,
   });
 
   const rows = data?.data ?? [];
   const total = data?.meta.total ?? 0;
-  const hasNext = page * PAGE_SIZE < total;
 
   /** Change a filter → reset to page 1 so we never land on an out-of-range page. */
   function setFilter(key: string, value: string) {
@@ -168,7 +165,7 @@ export function OrdersView() {
 
       <Card className="overflow-hidden p-0">
         {isLoading ? (
-          <SkeletonRows rows={PAGE_SIZE} cols={6} />
+          <SkeletonRows rows={pageSize} cols={6} />
         ) : isError ? (
           <ErrorState description="Couldn't load orders." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
@@ -243,26 +240,13 @@ export function OrdersView() {
               </Table>
             </div>
 
-            {/* Pager — 15/page, Prev/Next only (no total count). */}
-            <div className="flex items-center justify-end gap-1 border-t border-border px-4 py-3">
-              <button
-                type="button"
-                className={pagerBtn}
-                onClick={() => goPage(page - 1)}
-                disabled={page <= 1}
-              >
-                ‹ Prev
-              </button>
-              <span className="px-2 text-sm tabular-nums text-text-muted">Page {page}</span>
-              <button
-                type="button"
-                className={pagerBtn}
-                onClick={() => goPage(page + 1)}
-                disabled={!hasNext}
-              >
-                Next ›
-              </button>
-            </div>
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={goPage}
+              onPageSizeChange={setPageSize}
+            />
           </>
         )}
       </Card>

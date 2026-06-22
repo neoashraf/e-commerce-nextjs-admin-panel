@@ -1,57 +1,33 @@
 "use client";
 
-import { useState } from "react";
 import { Download } from "lucide-react";
 import { Can } from "@/lib/permissions/Can";
 import { Button } from "@/components/ui";
-import { stockListSchema } from "@/lib/api/schemas/inventory";
-import { fetchAllRows, buildCsv, downloadCsv, todayStamp } from "@/lib/exportCsv";
+import { useAsyncExport } from "@/lib/api/hooks/reports";
 
 /** Export is gated on the reports export permission (parity with the rest of the admin). */
 const EXPORT_PERMISSION = "reports.report.export";
 
-/** Render a variant's options map ({Color:"Black", Size:"M"}) as "Color: Black · Size: M". */
-function optionsLabel(options: Record<string, string> | null | undefined): string {
-  if (!options) return "";
-  return Object.entries(options)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(" · ");
+/** Map the stock-list status filter to the inventory report's `view` (low/out get dedicated views). */
+function statusToView(status?: string): string {
+  if (status === "low_stock") return "low_stock";
+  if (status === "out_of_stock") return "out_of_stock";
+  return "levels";
 }
 
 /**
- * Export the stock list to CSV — done CLIENT-SIDE: fetch every page of the (filtered) inventory list
- * and serialize to CSV in the browser, then download. Replaces the async reports-export pipeline
- * (POST /admin/reports/export, report `inventory`), which returned status:failed; building the file
- * here is reliable and always matches the on-screen search + status filter.
+ * CSV export for the admin Stock list — runs through the async reports-export pipeline
+ * (POST /admin/reports/export, report `inventory`), so the file is tracked in the Exports manager
+ * (MANAGE › Exports) and auto-downloads when ready. The status filter maps to the report `view`
+ * (levels / low_stock / out_of_stock).
  */
 export function StockExportButton({ status, q }: { status?: string; q?: string }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const { start, busy, failed, reason } = useAsyncExport();
 
-  const onExport = async () => {
-    setBusy(true);
-    setError(false);
-    try {
-      const rows = await fetchAllRows("/admin/inventory", { q, status }, stockListSchema);
-      const csv = buildCsv(
-        ["SKU", "Product", "Options", "On-hand", "Reserved", "Available", "Low-stock threshold", "Status"],
-        rows.map((r) => [
-          r.sku_code,
-          r.product_title ?? "",
-          optionsLabel(r.options),
-          r.on_hand,
-          r.reserved,
-          r.available,
-          r.low_stock_threshold,
-          r.status,
-        ]),
-      );
-      downloadCsv(`stock-${todayStamp()}.csv`, csv);
-    } catch {
-      setError(true);
-    } finally {
-      setBusy(false);
-    }
+  const onExport = () => {
+    const params: Record<string, string> = { view: statusToView(status) };
+    if (q) params.q = q;
+    start({ report_key: "inventory", params, format: "csv" });
   };
 
   return (
@@ -67,8 +43,10 @@ export function StockExportButton({ status, q }: { status?: string; q?: string }
           {busy ? "Exporting…" : "Export CSV"}
         </Button>
         <p aria-live="polite" className="text-xs">
-          {busy && <span className="text-text-muted">Preparing your CSV…</span>}
-          {error && <span className="text-error">Export failed. Try again.</span>}
+          {busy && <span className="text-text-muted">Preparing your CSV — it&apos;ll download and appear in Exports.</span>}
+          {failed && (
+            <span className="text-error">{reason ? `Export failed: ${reason}` : "Export failed. Try again."}</span>
+          )}
         </p>
       </div>
     </Can>

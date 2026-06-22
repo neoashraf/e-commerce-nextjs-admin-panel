@@ -4,15 +4,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   ChevronRight,
+  CornerDownRight,
   Image as ImageIcon,
-  Layers,
   Link2,
+  ListFilter,
   Lock,
   RotateCw,
   Search,
-  Settings2,
+  SearchCode,
   SlidersHorizontal,
   Trash2,
   Upload,
@@ -286,7 +288,7 @@ export function CategoryEditor({
         {/* Main column */}
         <div className="min-w-0 flex-1 space-y-5">
           {/* General */}
-          <SectionCard icon={<Settings2 className="h-[18px] w-[18px]" />} title="General">
+          <SectionCard icon={<SlidersHorizontal className="h-[18px] w-[18px]" />} title="General">
             <div className="space-y-[17px]">
               <label className="block">
                 <Eyebrow>Name <span className="text-error">*</span></Eyebrow>
@@ -315,7 +317,7 @@ export function CategoryEditor({
                 ) : (
                   <div className="mt-2 flex flex-wrap items-center gap-2.5">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-50 px-2.5 py-1 text-[11.5px] font-semibold text-accent-700">
-                      <Layers className="h-3 w-3" /> This will be a level-{previewLevel} category
+                      <CornerDownRight className="h-3 w-3" /> This will be a level-{previewLevel} category
                     </span>
                     <span className="text-[11.5px] text-text-faint">Leave empty for a top-level category.</span>
                   </div>
@@ -388,7 +390,7 @@ export function CategoryEditor({
           </SectionCard>
 
           {/* SEO */}
-          <SectionCard icon={<SlidersHorizontal className="h-[18px] w-[18px]" />} title="SEO">
+          <SectionCard icon={<SearchCode className="h-[18px] w-[18px]" />} title="SEO">
             <div className="space-y-4">
               <label className="block">
                 <Eyebrow>Slug</Eyebrow>
@@ -434,7 +436,7 @@ export function CategoryEditor({
             <div className="border-b border-border px-4 py-3.5">
               <div className="flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2.5">
-                  <span className="text-accent-600"><SlidersHorizontal className="h-[18px] w-[18px]" /></span>
+                  <span className="text-accent-600"><ListFilter className="h-[18px] w-[18px]" /></span>
                   <h2 className="text-[15px] font-semibold tracking-tight text-text">Filterable attributes</h2>
                 </div>
                 {!attrsLoading && !attrsError && (attributes?.length ?? 0) > 0 && (
@@ -455,13 +457,13 @@ export function CategoryEditor({
               </div>
             ) : attrsError ? (
               <div className="flex flex-col items-center gap-2.5 px-5 py-8 text-center">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-error-50 text-error"><SlidersHorizontal className="h-5 w-5" /></span>
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-error-50 text-error"><AlertTriangle className="h-5 w-5" /></span>
                 <div className="text-[13px] font-semibold text-text">Couldn’t load filterable attributes</div>
                 <Button variant="secondary" size="sm" leadingIcon={<RotateCw className="h-3.5 w-3.5" />} onClick={() => refetchAttrs()}>Retry</Button>
               </div>
             ) : (attributes?.length ?? 0) === 0 ? (
               <div className="flex flex-col items-center gap-2 px-5 py-8 text-center">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-surface-subtle text-text-faint"><SlidersHorizontal className="h-5 w-5" /></span>
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-surface-subtle text-text-faint"><ListFilter className="h-5 w-5" /></span>
                 <div className="text-[13px] leading-relaxed text-text-secondary">No filterable attributes defined yet. Create attributes to enable layered-nav facets.</div>
                 <Link href="/admin/attributes" className="mt-0.5 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-accent-600 hover:text-accent-700">
                   <ArrowRight className="h-3.5 w-3.5" /> Go to Attributes
@@ -493,7 +495,10 @@ export function CategoryEditor({
                         role="checkbox"
                         aria-checked={checked}
                         onClick={() => toggleCode(a.code)}
-                        className="mb-px flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left hover:bg-surface-subtle"
+                        className={cn(
+                          "mb-px flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors",
+                          checked ? "bg-accent-50" : "hover:bg-surface-subtle",
+                        )}
                       >
                         <span className={cn("grid h-[18px] w-[18px] shrink-0 place-items-center rounded border", checked ? "border-accent-600 bg-accent-600 text-white" : "border-border-strong bg-surface")}>
                           {checked && <CheckIcon />}

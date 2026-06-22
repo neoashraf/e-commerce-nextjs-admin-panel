@@ -109,6 +109,21 @@ test.describe("Category editor", () => {
     await page.screenshot({ path: `e2e/__shots__/editor-${test.info().project.name}.png`, fullPage: false });
   });
 
+  test("selected filterable attributes get a highlighted row", async ({ page }) => {
+    await seed(page);
+    await page.goto("/admin/categories/turf");
+    await expect(page.getByRole("heading", { name: "Filterable attributes" })).toBeVisible();
+
+    await page.getByRole("checkbox", { name: /Brand/ }).click();
+    await page.getByRole("checkbox", { name: /Size/ }).click();
+    await expect(page.getByText("2 selected")).toBeVisible();
+
+    await page
+      .locator("aside")
+      .filter({ hasText: "Filterable attributes" })
+      .screenshot({ path: `e2e/__shots__/rail-${test.info().project.name}.png` });
+  });
+
   test("save bar stays pinned to the bottom", async ({ page }) => {
     await seed(page);
     await page.goto("/admin/categories/turf");

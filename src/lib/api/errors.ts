@@ -16,18 +16,26 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details: ApiErrorDetail[];
+  /**
+   * Structured, object-shaped `error.details` (when the envelope carries an object
+   * rather than a field array) — e.g. the 409 `CATEGORY_HAS_DEPENDENTS` payload
+   * `{ child_categories, published_products }`. `null` for array/absent details.
+   */
+  readonly context: Record<string, unknown> | null;
 
   constructor(
     status: number,
     code: string,
     message: string,
     details: ApiErrorDetail[] = [],
+    context: Record<string, unknown> | null = null,
   ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.context = context;
   }
 
   /** True for 4xx client errors — React Query should NOT retry these. */

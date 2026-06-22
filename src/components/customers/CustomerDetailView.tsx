@@ -19,7 +19,12 @@ import {
   UserCheck,
   UserX,
 } from "lucide-react";
-import { useCustomer, useCustomerStatus, useAddNote } from "@/lib/api/hooks/useCustomers";
+import {
+  useCustomer,
+  useCustomerStatus,
+  useAddNote,
+  useCustomerWishlist,
+} from "@/lib/api/hooks/useCustomers";
 import { useAdminOrders } from "@/lib/api/hooks/useOrdersAdmin";
 import { Can } from "@/lib/permissions/Can";
 import { usePermissions } from "@/lib/permissions/usePermissions";
@@ -44,11 +49,14 @@ import {
   TR,
 } from "@/components/ui";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { resolveMediaUrl } from "@/lib/media";
 import { TagChips } from "./TagChips";
+import { CustomerTagPicker } from "./CustomerTagPicker";
 import {
   CUSTOMERS_NOTE_PERMISSION,
   CUSTOMERS_READ_PERMISSION,
   CUSTOMERS_SUSPEND_PERMISSION,
+  CUSTOMERS_TAG_PERMISSION,
 } from "./permissions";
 
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
@@ -282,11 +290,14 @@ export function CustomerDetailView({ id }: { id: string }) {
                 )}
               </div>
 
-              {data.tags.length > 0 && (
-                <div className="mt-2.5">
-                  <TagChips tags={data.tags} max={6} />
-                </div>
-              )}
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                {data.tags.length > 0 && <TagChips tags={data.tags} max={6} />}
+                {!isGuest && !isDeleted && (
+                  <Can permission={CUSTOMERS_TAG_PERMISSION}>
+                    <CustomerTagPicker customerId={data.id} assignedKeys={data.tags} />
+                  </Can>
+                )}
+              </div>
 
             </div>
           </div>
@@ -414,19 +425,8 @@ export function CustomerDetailView({ id }: { id: string }) {
             )}
           </Card>
 
-          {/* (4) WISHLIST — count only (no items endpoint exposed). */}
-          <Card className="p-[18px]">
-            <PanelHeader
-              icon={Heart}
-              title="Wishlist"
-              count={`${data.wishlist_count ?? 0} item${(data.wishlist_count ?? 0) === 1 ? "" : "s"}`}
-            />
-            <p className="mt-3 text-[12.5px] text-text-muted">
-              {(data.wishlist_count ?? 0) === 0
-                ? "No items saved to the wishlist."
-                : `${data.wishlist_count} item${data.wishlist_count === 1 ? "" : "s"} saved to the wishlist.`}
-            </p>
-          </Card>
+          {/* (4) WISHLIST — items when the admin endpoint exists, else the count. */}
+          <WishlistPanel customerId={data.id} count={data.wishlist_count ?? 0} />
         </div>
 
         {/* ===== RIGHT COLUMN ===== */}
@@ -564,6 +564,82 @@ function NotesPanel({
             </li>
           ))}
         </ul>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Wishlist (FR-CUST-013). The design shows the saved items; the admin wishlist-items
+ * endpoint doesn't exist yet (only the count on the 360 payload + the customer's own
+ * /me/wishlist), so this is FE-ready: it renders the item list when the endpoint returns
+ * one and otherwise shows the count with a clear "items aren't available yet" line. It
+ * lights up automatically once BE ships `GET /admin/customers/{id}/wishlist`.
+ */
+function WishlistPanel({ customerId, count }: { customerId: string; count: number }) {
+  const { data: items = [], isLoading } = useCustomerWishlist(customerId);
+  const hasItems = items.length > 0;
+
+  return (
+    <Card className="p-[18px]">
+      <PanelHeader
+        icon={Heart}
+        title="Wishlist"
+        count={`${count} item${count === 1 ? "" : "s"}`}
+      />
+      {hasItems ? (
+        <ul className="mt-3 flex flex-col gap-2.5">
+          {items.map((it, i) => {
+            const opts = it.variant_options
+              ? Object.values(it.variant_options).join(" · ")
+              : "";
+            return (
+              <li
+                key={it.product_id ?? i}
+                className="flex items-center gap-3 rounded-lg border border-border bg-surface-hover p-2.5"
+              >
+                {it.product_image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={resolveMediaUrl(it.product_image)}
+                    alt={it.product_title ?? "Product"}
+                    className="h-11 w-11 flex-shrink-0 rounded-md border border-border object-cover"
+                  />
+                ) : (
+                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md bg-surface-subtle text-text-faint">
+                    <Heart className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] font-medium text-text">
+                    {it.product_title ?? "Product"}
+                  </p>
+                  {opts && <p className="truncate text-[11.5px] text-text-muted">{opts}</p>}
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  {it.price && (
+                    <p className="text-[12.5px] font-semibold tabular-nums text-text">
+                      {formatBDT(Number(it.price))}
+                    </p>
+                  )}
+                  {it.in_stock === false && (
+                    <p className="text-[10.5px] font-semibold text-warning">Out of stock</p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="mt-3 flex items-baseline gap-2">
+          <span className="text-[25px] font-bold tabular-nums text-text">{count}</span>
+          <span className="text-[13px] text-text-muted">saved items</span>
+        </div>
+      )}
+      {!hasItems && count > 0 && !isLoading && (
+        <p className="mt-1.5 text-[11.5px] text-text-faint">
+          Item details aren’t available here yet.
+        </p>
       )}
     </Card>
   );

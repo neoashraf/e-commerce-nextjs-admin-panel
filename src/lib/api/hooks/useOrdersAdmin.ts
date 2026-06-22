@@ -122,3 +122,11 @@ export function useCancelOrderAdmin(orderNo: string) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-order", orderNo] }); qc.invalidateQueries({ queryKey: ["admin-orders"] }); },
   });
 }
+/** Add an internal note (FR-ORD-072) — POST /admin/orders/{orderNo}/notes → { id, created_at }. */
+export function useAddOrderNote(orderNo: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) => api.post(`/admin/orders/${orderNo}/notes`, { body }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-order", orderNo] }); },
+  });
+}

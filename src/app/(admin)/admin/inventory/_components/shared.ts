@@ -1,5 +1,20 @@
 import type { StockRow, StockStatus } from "@/lib/api/schemas/inventory";
 
+/** Map a SKU/family to a category glyph for the thumbnail placeholder (design §C
+ * uses footprints/shirt/circle-dot). Boots/turf → Footprints, jerseys → Shirt,
+ * footballs → CircleDot, else Package. Best-effort from the SKU/title text. */
+export function stockIconKey(row: {
+  sku_code: string;
+  product_title?: string | null;
+}): "footprints" | "shirt" | "ball" | "package" {
+  const hay = `${row.sku_code} ${row.product_title ?? ""}`.toLowerCase();
+  if (/jersey|shirt|kit|tiro|hm24|home/.test(hay)) return "shirt";
+  if (/football|ball|rihla|impel|academy|al-?rihla/.test(hay)) return "ball";
+  if (/boot|turf|phantom|predator|mercurial|tiempo|future|king|footprint/.test(hay))
+    return "footprints";
+  return "package";
+}
+
 /** Mutate permission code — the seeded code the backend enforces
  * (`@Requires('inventory.stock.update')`); the API contract names it
  * `inventory.stock.adjust` but the running guard uses `.update`. Reads use
@@ -33,13 +48,18 @@ export function optionsLabel(o?: Record<string, string> | null): string {
 }
 
 /**
- * Options sub-line for a row. When CAT labels are unavailable (partial state,
- * design §6/§13) we fall back to the sku + variant id so qty/status still read.
+ * Options sub-line for a row. When CAT option labels are unavailable (partial
+ * state, design §6/§13) the design falls back to the **SKU code** — never the
+ * variant UUID — shown faint. Returns "" when there's nothing meaningful so the
+ * caller can render a muted dash.
  */
 export function optionsOrFallback(row: StockRow): string {
-  const labels = optionsLabel(row.options);
-  if (labels) return labels;
-  return `${row.sku_code} · ${row.variant_id}`;
+  return optionsLabel(row.options) || row.sku_code;
+}
+
+/** True when the row has real CAT option labels (vs. the SKU-code fallback) — drives the muted color. */
+export function hasOptionLabels(row: StockRow): boolean {
+  return optionsLabel(row.options).length > 0;
 }
 
 export type SortKey = "product" | "available" | "status";

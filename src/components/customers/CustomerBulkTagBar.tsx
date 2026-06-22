@@ -2,36 +2,40 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Tag, X } from "lucide-react";
+import type { CustomerTag } from "@/lib/api/hooks/useCustomers";
 import { cn } from "@/lib/cn";
 
 /**
- * Bulk-tag bar shown when customer rows are selected (design §8.7, FR-CUST-031).
- * "{n} selected" + an idempotent "Add tag" picker + a clear control. The parent
- * gates this on `customers.tag.manage` (so it never renders for roles without
- * the permission). Applying a tag is presentation-only here — there is no
- * customers tag-assign mutation hook yet.
- * TODO(design): wire `onApplyTag` to a real assign-tag mutation
- * (`POST /admin/customers/{id}/tags`) when that hook is added (out of scope).
+ * Bulk-tag bar shown when customer rows are selected (design §D, FR-CUST-031).
+ * "{n} selected" + an idempotent "Add tag" picker (from the real tag catalog) + a
+ * "Create new tag…" inline action + a clear control. The parent gates this on
+ * `customers.tag.manage`. Picking a catalog tag calls `onApplyTag(tagId)`; the
+ * create field calls `onCreateTag(key, label)` (which creates then assigns).
  */
+const DOT = "var(--accent-600)";
 
-const KNOWN_TAGS = ["VIP", "Wholesale", "Repeat", "Newsletter", "Football", "Cricket"];
-
-const TAG_DOT: Record<string, string> = {
-  VIP: "#D97706",
-  Wholesale: "var(--accent-600)",
-  Repeat: "#16A34A",
-  Newsletter: "#94A3B8",
-  Football: "#06B6D4",
-  Cricket: "#8B5CF6",
-};
+/** Slugify a free-text label to a valid tag key ([a-z0-9_-]). */
+export function toTagKey(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 export function CustomerBulkTagBar({
   selectedCount,
+  tags,
+  busy = false,
   onApplyTag,
+  onCreateTag,
   onClear,
 }: {
   selectedCount: number;
-  onApplyTag: (tag: string) => void;
+  tags: CustomerTag[];
+  busy?: boolean;
+  onApplyTag: (tagId: string) => void;
+  onCreateTag: (key: string, label: string) => void;
   onClear: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -54,10 +58,16 @@ export function CustomerBulkTagBar({
     };
   }, [open]);
 
-  function apply(tag: string) {
-    const t = tag.trim();
-    if (!t) return;
-    onApplyTag(t);
+  function pick(tagId: string) {
+    onApplyTag(tagId);
+    setOpen(false);
+  }
+
+  function create() {
+    const label = draft.trim();
+    const key = toTagKey(label);
+    if (!key) return;
+    onCreateTag(key, label);
     setOpen(false);
     setDraft("");
   }
@@ -72,11 +82,12 @@ export function CustomerBulkTagBar({
           type="button"
           aria-haspopup="menu"
           aria-expanded={open}
+          disabled={busy}
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex h-[30px] items-center gap-1.5 rounded-md border border-accent-600 bg-surface px-2.5 text-[12.5px] font-semibold text-accent-700 hover:bg-accent-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+          className="inline-flex h-[30px] items-center gap-1.5 rounded-md border border-accent-600 bg-surface px-2.5 text-[12.5px] font-semibold text-accent-700 hover:bg-accent-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
         >
           <Tag className="h-3.5 w-3.5" aria-hidden="true" />
-          Add tag
+          {busy ? "Applying…" : "Add tag"}
           <ChevronDown className="h-3 w-3" aria-hidden="true" />
         </button>
         {open && (
@@ -87,37 +98,46 @@ export function CustomerBulkTagBar({
             <div className="px-2 pb-1.5 pt-1 text-eyebrow uppercase tracking-wide text-text-faint">
               Apply tag to {selectedCount}
             </div>
-            {KNOWN_TAGS.map((t) => (
-              <button
-                key={t}
-                role="menuitem"
-                type="button"
-                onClick={() => apply(t)}
-                className="flex h-[34px] w-full items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-text-secondary hover:bg-surface-subtle focus-visible:outline-none focus-visible:bg-surface-subtle"
-              >
-                <span
-                  className="h-2 w-2 flex-shrink-0 rounded-full"
-                  style={{ backgroundColor: TAG_DOT[t] ?? "#94A3B8" }}
-                  aria-hidden="true"
-                />
-                {t}
-              </button>
-            ))}
+            {tags.length === 0 ? (
+              <p className="px-2 py-1.5 text-[12.5px] text-text-muted">
+                No tags yet — create one below.
+              </p>
+            ) : (
+              <div className="max-h-[200px] overflow-y-auto">
+                {tags.map((t) => (
+                  <button
+                    key={t.id}
+                    role="menuitem"
+                    type="button"
+                    onClick={() => pick(t.id)}
+                    className="flex h-[34px] w-full items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-text-secondary hover:bg-surface-subtle focus-visible:outline-none focus-visible:bg-surface-subtle"
+                  >
+                    <span
+                      className="h-2 w-2 flex-shrink-0 rounded-full"
+                      style={{ backgroundColor: t.color ?? DOT }}
+                      aria-hidden="true"
+                    />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="mx-1 my-1.5 h-px bg-border" />
             <div className="flex items-center gap-2 px-1 py-0.5">
               <input
                 type="text"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && apply(draft)}
+                onKeyDown={(e) => e.key === "Enter" && create()}
                 placeholder="Create new tag…"
                 aria-label="Create new tag"
                 className="h-8 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-2.5 text-[12.5px] text-text placeholder:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
               />
               <button
                 type="button"
-                onClick={() => apply(draft)}
-                className="h-8 flex-shrink-0 rounded-md bg-accent-600 px-2.5 text-[12.5px] font-semibold text-accent-fg hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
+                onClick={create}
+                disabled={!draft.trim()}
+                className="h-8 flex-shrink-0 rounded-md bg-accent-600 px-2.5 text-[12.5px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
               >
                 Add
               </button>
@@ -125,7 +145,7 @@ export function CustomerBulkTagBar({
           </div>
         )}
       </div>
-      <span className="text-xs text-accent-700/70">
+      <span className="hidden text-xs text-accent-700/70 sm:inline">
         Applying a tag is idempotent — already-tagged customers are unaffected.
       </span>
       <button

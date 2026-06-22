@@ -138,6 +138,100 @@ export function useCustomerStatus(id: string) {
   };
 }
 
+// ── Tags (FR-CUST-031): catalog + assign/unassign (POST/DELETE /admin/customers/{id}/tags) ──
+export const customerTagSchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  label: z.string(),
+  color: z.string().nullable().optional(),
+});
+export type CustomerTag = z.infer<typeof customerTagSchema>;
+const customerTagListSchema = z.array(customerTagSchema);
+
+/** The customer tag catalog (GET /admin/customer-tags) — keyed by `customers.tag.manage`. */
+export function useCustomerTags(enabled = true) {
+  return useQuery({
+    queryKey: ["admin-customer-tags"] as const,
+    enabled,
+    queryFn: (): Promise<CustomerTag[]> =>
+      api.get("/admin/customer-tags", { schema: customerTagListSchema }) as Promise<CustomerTag[]>,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Create a tag in the catalog (POST /admin/customer-tags) → returns the new TagDto (with its id). */
+export function useCreateCustomerTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { key: string; label: string; color?: string }) =>
+      api.post("/admin/customer-tags", body, { schema: customerTagSchema }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-customer-tags"] }),
+  });
+}
+
+/**
+ * Assign a tag to one or more customers (idempotent per the contract). Customer rows/detail
+ * carry tag **keys**, but assignment needs the tag **id**, so callers pass the resolved
+ * `tag_id`. Invalidates the affected customer(s) + the directory so the chips refresh.
+ */
+export function useAssignCustomerTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ customerId, tagId }: { customerId: string; tagId: string }) =>
+      api.post(`/admin/customers/${customerId}/tags`, { tag_id: tagId }),
+    onSuccess: (_d, { customerId }) => {
+      qc.invalidateQueries({ queryKey: ["admin-customer", customerId] });
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+    },
+  });
+}
+
+export function useUnassignCustomerTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ customerId, tagId }: { customerId: string; tagId: string }) =>
+      api.delete(`/admin/customers/${customerId}/tags/${tagId}`),
+    onSuccess: (_d, { customerId }) => {
+      qc.invalidateQueries({ queryKey: ["admin-customer", customerId] });
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+    },
+  });
+}
+
+// ── Wishlist items (admin) — FE-ready; the admin endpoint does not exist yet (BE ask).
+// GET /admin/customers/{id}/wishlist → items. Schema optional-accepts so it degrades to
+// the count-only/empty panel until BE ships it; lights up automatically when present.
+export const wishlistItemSchema = z.object({
+  product_id: z.string().nullable().optional(),
+  product_title: z.string().nullable().optional(),
+  product_image: z.string().nullable().optional(),
+  variant_options: z.record(z.string()).nullable().optional(),
+  price: z.string().nullable().optional(),
+  in_stock: z.boolean().nullable().optional(),
+  added_at: z.string().nullable().optional(),
+});
+export type WishlistItem = z.infer<typeof wishlistItemSchema>;
+const wishlistListSchema = z.array(wishlistItemSchema);
+
+export function useCustomerWishlist(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ["admin-customer-wishlist", id] as const,
+    enabled: enabled && !!id,
+    // The endpoint may not exist yet → treat any error as "no items" (panel degrades to count).
+    queryFn: async (): Promise<WishlistItem[]> => {
+      try {
+        return (await api.get(`/admin/customers/${id}/wishlist`, {
+          schema: wishlistListSchema,
+        })) as WishlistItem[];
+      } catch {
+        return [];
+      }
+    },
+    retry: false,
+    staleTime: 30_000,
+  });
+}
+
 // ── CSV export (async: POST /admin/customers/export → poll GET …/export/{id}) ──
 const customerExportAcceptedSchema = z.object({ export_id: z.string(), status: z.string() });
 const customerExportStatusSchema = z.object({

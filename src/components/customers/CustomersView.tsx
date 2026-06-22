@@ -3,8 +3,13 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Calendar, Download, Search, UserRound, Users } from "lucide-react";
-import { useCustomersPage } from "@/lib/api/hooks/useCustomers";
+import { Calendar, Check, Download, Search, UserRound, Users } from "lucide-react";
+import {
+  useCustomersPage,
+  useCustomerTags,
+  useAssignCustomerTag,
+  useCreateCustomerTag,
+} from "@/lib/api/hooks/useCustomers";
 import { useAsyncExport } from "@/lib/api/hooks/reports";
 import { usePageParams } from "@/lib/usePageParams";
 import { Can } from "@/lib/permissions/Can";
@@ -30,8 +35,14 @@ import {
   TR,
 } from "@/components/ui";
 import { CustomerExportModal } from "./CustomerExportModal";
+import { CustomerBulkTagBar } from "./CustomerBulkTagBar";
+import { CustomerRowMenu } from "./CustomerRowMenu";
 import { TagChips, CUSTOMER_TAG_OPTIONS } from "./TagChips";
-import { CUSTOMERS_EXPORT_PERMISSION, CUSTOMERS_READ_PERMISSION } from "./permissions";
+import {
+  CUSTOMERS_EXPORT_PERMISSION,
+  CUSTOMERS_READ_PERMISSION,
+  CUSTOMERS_TAG_PERMISSION,
+} from "./permissions";
 
 /**
  * Customers directory (CUST) — LIST archetype on the Commerce Admin design system.
@@ -134,6 +145,70 @@ export function CustomersView() {
   const [exportOpen, setExportOpen] = useState(false);
   const rows = useMemo(() => data?.data ?? [], [data]);
   const total = data?.meta.total ?? 0;
+
+  // ── Row selection + bulk tag action (FR-CUST-031). Guests aren't selectable
+  //    (no account). Tag assignment is gated on `customers.tag.manage`. ──
+  const canTag = can(CUSTOMERS_TAG_PERMISSION);
+  const tagsQuery = useCustomerTags(canTag);
+  const assignTag = useAssignCustomerTag();
+  const createTag = useCreateCustomerTag();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [tagBusy, setTagBusy] = useState(false);
+
+  const selectableIds = useMemo(
+    () => rows.filter((c) => c.id && !c.is_guest).map((c) => c.id),
+    [rows],
+  );
+  const allChecked =
+    selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+  const someChecked = selectableIds.some((id) => selected.has(id));
+
+  function toggleRow(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected((prev) => {
+      if (selectableIds.every((id) => prev.has(id))) {
+        const next = new Set(prev);
+        selectableIds.forEach((id) => next.delete(id));
+        return next;
+      }
+      return new Set([...prev, ...selectableIds]);
+    });
+  }
+
+  /** Assign a catalog tag (by id) to every selected customer (idempotent server-side). */
+  async function applyTagToSelected(tagId: string) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setTagBusy(true);
+    try {
+      await Promise.all(ids.map((customerId) => assignTag.mutateAsync({ customerId, tagId })));
+      toast(`Tagged ${ids.length} customer${ids.length === 1 ? "" : "s"}.`);
+      setSelected(new Set());
+    } catch {
+      toast("Couldn't apply the tag to every customer. Try again.", "error");
+    } finally {
+      setTagBusy(false);
+    }
+  }
+
+  /** Create a new catalog tag, then assign it to the selection. */
+  async function createAndApply(key: string, label: string) {
+    setTagBusy(true);
+    try {
+      const created = await createTag.mutateAsync({ key, label });
+      await applyTagToSelected(created.id);
+    } catch {
+      toast("Couldn't create that tag. Try again.", "error");
+      setTagBusy(false);
+    }
+  }
 
   /** Filter changes reset to page 1 so we never land on an out-of-range page. */
   function setParam(key: string, value: string) {
@@ -344,8 +419,19 @@ export function CustomersView() {
 
       {/* ===== TABLE CARD ===== */}
       <Card className="overflow-hidden p-0">
+        {/* Bulk-tag bar — appears when (non-guest) rows are selected; gated on tag.manage. */}
+        {canTag && someChecked && (
+          <CustomerBulkTagBar
+            selectedCount={selected.size}
+            tags={tagsQuery.data ?? []}
+            busy={tagBusy}
+            onApplyTag={applyTagToSelected}
+            onCreateTag={createAndApply}
+            onClear={() => setSelected(new Set())}
+          />
+        )}
         {isLoading ? (
-          <SkeletonRows rows={8} cols={8} />
+          <SkeletonRows rows={8} cols={9} />
         ) : isError ? (
           <ErrorState description="Couldn’t load customers." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
@@ -359,10 +445,20 @@ export function CustomersView() {
         ) : (
           <>
           <div className="overflow-x-auto">
-            <Table className="min-w-[860px]">
+            <Table className="min-w-[920px]">
               <caption className="sr-only">Customers. {resultCount} shown.</caption>
               <THead>
                 <TR hover={false}>
+                  {canTag && (
+                    <TH className="w-11 pr-0">
+                      <CustomerCheckBox
+                        checked={allChecked}
+                        indeterminate={someChecked && !allChecked}
+                        onClick={toggleAll}
+                        label="Select all customers on this page"
+                      />
+                    </TH>
+                  )}
                   <TH>Name</TH>
                   <TH>Phone</TH>
                   <TH>Email</TH>
@@ -371,6 +467,9 @@ export function CustomersView() {
                   <TH numeric>Orders</TH>
                   <TH numeric>Total spent</TH>
                   <TH>Last order</TH>
+                  <TH className="w-14">
+                    <span className="sr-only">Actions</span>
+                  </TH>
                 </TR>
               </THead>
               <TBody>
@@ -381,9 +480,23 @@ export function CustomersView() {
                   return (
                     <TR
                       key={c.id || `${c.phone ?? ""}-${c.email ?? ""}-${i}`}
-                      className={cn(c.id && "cursor-pointer")}
+                      className={cn(
+                        c.id && "cursor-pointer",
+                        c.id && selected.has(c.id) && "bg-accent-50/60",
+                      )}
                       onClick={() => c.id && router.push(`/admin/customers/${c.id}`)}
                     >
+                      {canTag && (
+                        <TD className="pr-0" onClick={(e) => e.stopPropagation()}>
+                          {c.id && !isGuest ? (
+                            <CustomerCheckBox
+                              checked={selected.has(c.id)}
+                              onClick={() => toggleRow(c.id)}
+                              label={`Select ${name}`}
+                            />
+                          ) : null}
+                        </TD>
+                      )}
                       <TD className="max-w-[230px]">
                         <div className="flex items-center gap-2.5">
                           <span
@@ -436,6 +549,19 @@ export function CustomersView() {
                       >
                         {c.last_order_at ? formatDate(c.last_order_at) : "—"}
                       </TD>
+                      <TD className="text-right" onClick={(e) => e.stopPropagation()}>
+                        {c.id && (
+                          <CustomerRowMenu
+                            id={c.id}
+                            name={name}
+                            isGuest={isGuest}
+                            onAddTag={() => {
+                              setSelected(new Set([c.id]));
+                              toast("Customer selected — choose a tag in the bar above.", "info");
+                            }}
+                          />
+                        )}
+                      </TD>
                     </TR>
                   );
                 })}
@@ -460,5 +586,40 @@ export function CustomersView() {
         onConfirm={confirmExport}
       />
     </div>
+  );
+}
+
+/** 18px rounded selection checkbox (design's row/select-all box); `indeterminate` shows a dash. */
+function CustomerCheckBox({
+  checked,
+  indeterminate = false,
+  onClick,
+  label,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  const on = checked || indeterminate;
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={indeterminate ? "mixed" : checked}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        "flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1",
+        on ? "border-accent-600 bg-accent-600 text-accent-fg" : "border-border-strong bg-surface",
+      )}
+    >
+      {indeterminate ? (
+        <span className="h-0.5 w-2.5 rounded-full bg-accent-fg" />
+      ) : checked ? (
+        <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
+      ) : null}
+    </button>
   );
 }

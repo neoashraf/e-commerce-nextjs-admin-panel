@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PackageX, Upload, WifiOff } from "lucide-react";
-import { useInventory } from "@/lib/api/hooks/useInventory";
+import { useInventory, useStockStatusCounts } from "@/lib/api/hooks/useInventory";
 import type { StockRow, StockStatus } from "@/lib/api/schemas/inventory";
 import { Can } from "@/lib/permissions/Can";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
@@ -72,9 +72,28 @@ export function InventoryView() {
     page,
     limit,
   });
+  const { low: lowCount, out: outCount } = useStockStatusCounts();
 
   const hasFilters = q !== "" || status !== "";
   const total = data?.meta.total ?? 0;
+  // Header summary (design: "{total} SKUs total · {low} low · {out} out"). When a status
+  // filter is active the design instead reads "Filtered to '<status>'".
+  const statusLabel: Record<string, string> = {
+    in_stock: "In stock",
+    low_stock: "Low",
+    out_of_stock: "Out",
+  };
+  const headerSummary = status
+    ? `Filtered to ‘${statusLabel[status] ?? status}’`
+    : data
+      ? [
+          `${total} SKU${total === 1 ? "" : "s"} total`,
+          lowCount !== undefined ? `${lowCount} low` : null,
+          outCount !== undefined ? `${outCount} out` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : undefined;
   const rows = useMemo(() => {
     const base = data?.data ?? [];
     return sort ? sortRows(base, sort, dir) : base;
@@ -105,8 +124,13 @@ export function InventoryView() {
   return (
     <div className="space-y-5">
       {/* Header — read-only (records are auto-created by CAT; no Create CTA). */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">Stock</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">Stock</h1>
+          {headerSummary && (
+            <p className="mt-0.5 text-[13px] tabular-nums text-text-muted">{headerSummary}</p>
+          )}
+        </div>
         <div className="flex items-start gap-2">
           <StockExportButton status={status} q={q} />
           <Can permission={STOCK_MUTATE_PERMISSION}>

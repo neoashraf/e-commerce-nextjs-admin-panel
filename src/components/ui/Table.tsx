@@ -1,4 +1,10 @@
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  ChevronUp,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 import { PAGE_SIZE_OPTIONS } from "@/lib/constants";
 
@@ -57,7 +63,10 @@ export function TH({
   onSort?: () => void;
 }) {
   const sortable = onSort !== undefined;
-  const Icon = sort === "asc" ? ChevronUp : ChevronDown;
+  // A sortable header ALWAYS shows a chevron so its sortability is obvious:
+  // a faint up/down ChevronsUpDown when inactive, an accent up/down when active.
+  const active = sort === "asc" || sort === "desc";
+  const Icon = active ? (sort === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
   return (
     <th
       scope="col"
@@ -76,13 +85,21 @@ export function TH({
           type="button"
           onClick={onSort}
           className={cn(
-            "inline-flex items-center gap-1 rounded-sm hover:text-text-secondary",
+            "group inline-flex items-center gap-1 rounded-sm hover:text-text-secondary",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
             numeric && "flex-row-reverse",
           )}
         >
           {children}
-          {sort && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
+          <Icon
+            className={cn(
+              "h-3.5 w-3.5",
+              active
+                ? "text-accent-600"
+                : "text-text-faint/70 group-hover:text-text-muted",
+            )}
+            aria-hidden="true"
+          />
         </button>
       ) : (
         children

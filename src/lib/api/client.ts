@@ -220,9 +220,58 @@ async function requestForm<T>(
   return data as T;
 }
 
+/**
+ * Authenticated file download (e.g. the products CSV export, which the backend returns as a raw
+ * `text/csv` body, not the JSON envelope). Attaches the Bearer token, parses the error envelope the
+ * same way as `request`, and returns the body as a Blob plus the filename from `Content-Disposition`.
+ */
+async function requestBlob(
+  path: string,
+  opts: { params?: RequestOptions<unknown>["params"]; signal?: AbortSignal } = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  const headers: Record<string, string> = {};
+  const token = getAccessToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, opts.params), {
+      method: "GET",
+      headers,
+      signal: opts.signal,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "NETWORK_ERROR", "Could not reach the server.", []);
+  }
+
+  if (res.status === 401) useAuthStore.getState().clear();
+
+  if (!res.ok) {
+    let payload: unknown;
+    try {
+      payload = await res.json();
+    } catch {
+      throw new ApiError(res.status, "UNKNOWN", res.statusText || "Request failed.");
+    }
+    const parsed = errorEnvelopeSchema.safeParse(payload);
+    if (parsed.success) {
+      const { code, message, details } = parsed.data.error;
+      throw new ApiError(res.status, code, message, (details as ApiErrorDetail[]) ?? []);
+    }
+    throw new ApiError(res.status, "UNKNOWN", res.statusText || "Request failed.");
+  }
+
+  const disposition = res.headers.get("Content-Disposition");
+  const match = disposition?.match(/filename="?([^"]+)"?/i);
+  return { blob: await res.blob(), filename: match ? match[1] : null };
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions<T>) =>
     request<T>("GET", path, undefined, opts),
+  download: (path: string, opts?: { params?: RequestOptions<unknown>["params"]; signal?: AbortSignal }) =>
+    requestBlob(path, opts),
   postForm: <T>(path: string, form: FormData, opts?: RequestOptions<T>) =>
     requestForm<T>(path, form, opts),
   post: <T>(path: string, body?: Json, opts?: RequestOptions<T>) =>

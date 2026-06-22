@@ -15,6 +15,7 @@ import {
   familyDetailSchema,
   createFamilyResultSchema,
   productPageSchema,
+  bulkStatusResultSchema,
   type ProductPage,
   type CategoryNode,
   type CategoryDetail,
@@ -271,6 +272,41 @@ export function useDeleteProduct() {
   return useMutation({
     mutationFn: (id: string) => api.delete<void>(`/admin/products/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+  });
+}
+
+/**
+ * Bulk publish / archive the selected products (PATCH /admin/products/bulk-status). Returns the
+ * per-item `results[]` so the view can surface which succeeded/failed without aborting the batch
+ * (FR-CAT-015/016). Invalidates the list so the flipped statuses + qty refresh.
+ */
+export function useBulkProductStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: "published" | "archived" }) =>
+      api.patch("/admin/products/bulk-status", { ids, status }, { schema: bulkStatusResultSchema }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+  });
+}
+
+/**
+ * Download the current filtered product set as CSV (GET /admin/products/export). The backend returns
+ * a raw `text/csv` body (not the JSON envelope), so this goes through `api.download` and triggers a
+ * browser save using the server's `Content-Disposition` filename.
+ */
+export function useExportProducts() {
+  return useMutation({
+    mutationFn: async (params: Record<string, string | undefined>) => {
+      const { blob, filename } = await api.download("/admin/products/export", { params });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename ?? "products.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
   });
 }
 

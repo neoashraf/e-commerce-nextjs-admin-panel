@@ -301,7 +301,7 @@ export function CategoryEditor({
 
               <label className="block">
                 <Eyebrow>Parent category</Eyebrow>
-                <Select value={parentId} onChange={(e) => { setParentId(e.target.value); setDepthError(null); markDirty(); }} error={depthError ?? undefined}>
+                <Select aria-label="Parent category" value={parentId} onChange={(e) => { setParentId(e.target.value); setDepthError(null); markDirty(); }} error={depthError ?? undefined}>
                   <option value="">— None (top level)</option>
                   {parentOptions.map((c) => (
                     <option key={c.id} value={c.id} disabled={c.level >= 3}>

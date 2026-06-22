@@ -748,6 +748,7 @@ function CategoryRow({
       {/* Actions */}
       <td className="w-[118px] py-3 pr-4 text-right align-middle">
         {!isDel && (
+          <Can anyOf={["catalog.category.update", "catalog.category.create", "catalog.category.delete"]}>
           <div className="inline-flex items-center gap-1">
             <Can permission="catalog.category.update">
               <Link
@@ -808,6 +809,7 @@ function CategoryRow({
               )}
             </RowActions>
           </div>
+          </Can>
         )}
       </td>
     </tr>

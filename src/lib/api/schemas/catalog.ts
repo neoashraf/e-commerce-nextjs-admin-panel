@@ -63,6 +63,17 @@ export const createCategoryResultSchema = z.object({
   is_published: z.boolean().optional(),
 });
 
+/** The three single-image slots a category stores (POST /admin/categories/{id}/images). */
+export const CATEGORY_IMAGE_SLOTS = ["thumbnail", "logo", "banner"] as const;
+export type CategoryImageSlot = (typeof CATEGORY_IMAGE_SLOTS)[number];
+
+/** Result of a category image upload: the stored URL + the slot it was written to. */
+export const uploadCategoryImageResultSchema = z.object({
+  url: z.string(),
+  slot: z.enum(CATEGORY_IMAGE_SLOTS),
+});
+export type UploadCategoryImageResult = z.infer<typeof uploadCategoryImageResultSchema>;
+
 export const ATTRIBUTE_TYPES = [
   "text", "textarea", "select", "multiselect", "boolean", "number",
   "decimal", "date", "datetime", "price", "image", "file", "url",

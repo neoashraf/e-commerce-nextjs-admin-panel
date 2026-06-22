@@ -6,6 +6,8 @@ import {
   categoryTreeSchema,
   categoryDetailSchema,
   createCategoryResultSchema,
+  uploadCategoryImageResultSchema,
+  type CategoryImageSlot,
   attributeListSchema,
   attributePageSchema,
   type AttributePage,
@@ -79,6 +81,9 @@ type CategoryBody = Partial<{
   is_published: boolean;
   position: number;
   filterable_attribute_codes: string[];
+  image_url: string | null;
+  logo_url: string | null;
+  banner_url: string | null;
   meta_title: string;
   meta_keywords: string;
   meta_description: string;
@@ -119,6 +124,44 @@ export function useDeleteCategory() {
   return useMutation({
     mutationFn: (id: string) => api.delete<void>(`/admin/categories/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-categories"] }),
+  });
+}
+
+/**
+ * Reorder categories among their siblings (FR-CAT-004). The BE `PATCH { position }`
+ * is a **raw set** (it does not reindex siblings, and positions are 0-based), so a
+ * reorder must renumber every sibling whose slot changed — we send one PATCH per
+ * changed sibling with its **absolute** new 0-based `position` (never a relative ±1).
+ * The tree view holds the optimistic order locally and reconciles/rolls back on
+ * settle, so this only persists + refetches.
+ */
+export function useReorderCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (updates: Array<{ id: string; position: number }>) =>
+      Promise.all(
+        updates.map((u) => api.patch(`/admin/categories/${u.id}`, { position: u.position })),
+      ),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-categories"] }),
+  });
+}
+
+/** Upload a category image to a slot (thumbnail/logo/banner); BE stores it on the matching column. */
+export function useUploadCategoryImage(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, slot }: { file: File; slot: CategoryImageSlot }) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("slot", slot);
+      return api.postForm(`/admin/categories/${id}/images`, form, {
+        schema: uploadCategoryImageResultSchema,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-categories"] });
+      qc.invalidateQueries({ queryKey: catalogKeys.category(id) });
+    },
   });
 }
 

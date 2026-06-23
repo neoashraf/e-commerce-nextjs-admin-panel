@@ -579,48 +579,69 @@ export function OrderDetailAdminView({
         </Section>
       )}
 
-      {/* 8. INTERNAL NOTES (append-only; not customer-visible) */}
+      {/* 8. NOTES THREAD — customer note + admin notes (FR-ORD-072b) */}
       <Can permission="orders.order.update_status">
-        <Section icon={StickyNote} title="Internal notes">
-          {data.internal_notes.length > 0 ? (
+        <Section icon={StickyNote} title="Notes" count={data.notes.length > 0 ? data.notes.length : undefined}>
+          {data.notes.length > 0 ? (
             <div className="mb-3 flex flex-col gap-2.5">
-              {data.internal_notes.map((n, i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border border-border bg-surface-subtle px-3 py-2.5"
-                >
-                  <p className="text-[13px] leading-relaxed text-text-secondary">{n.body}</p>
-                  {n.created_at && (
-                    <p className="mt-1 text-[11px] tabular-nums text-text-faint">
-                      {formatDateTime(n.created_at)}
-                    </p>
-                  )}
-                </div>
-              ))}
+              {data.notes.map((n) => {
+                const isCustomer = n.author_type === "customer";
+                return (
+                  <div
+                    key={n.id}
+                    className="rounded-lg border border-border bg-surface-subtle px-3 py-2.5"
+                  >
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                      {/* Author-type badge */}
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                          isCustomer
+                            ? "bg-sky-100 text-sky-700"
+                            : "bg-amber-100 text-amber-700",
+                        )}
+                      >
+                        {isCustomer ? "Customer" : "Admin"}
+                      </span>
+                      <span className="text-[12px] font-medium text-text">{n.author_name}</span>
+                      <span className="ml-auto text-[11px] tabular-nums text-text-faint">
+                        {formatDateTime(n.created_at)}
+                      </span>
+                    </div>
+                    <p className="text-[13px] leading-relaxed text-text-secondary">{n.body}</p>
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <p className="mb-3 text-[13px] text-text-faint">No internal notes yet.</p>
+            <p className="mb-3 text-[13px] text-text-faint">No notes yet. Add one below.</p>
           )}
-          <textarea
-            rows={2}
-            aria-label="Add an internal note"
-            placeholder="Add an internal note…"
-            value={noteDraft}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            className={textareaCls}
-          />
-          <div className="mt-2.5 flex items-center justify-between gap-3">
-            <span className="text-[11px] text-text-faint">Not visible to the customer.</span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onAddNote}
-              disabled={!noteDraft.trim()}
-              loading={addNote.isPending}
-              leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
-            >
-              Add note
-            </Button>
+
+          {/* Add admin note form */}
+          <div className="mt-1">
+            <textarea
+              rows={2}
+              aria-label="Add an internal admin note"
+              placeholder="Add an internal note…"
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              className={textareaCls}
+            />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="text-[11px] text-text-faint">
+                Admin notes are not visible to the customer.
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onAddNote}
+                disabled={!noteDraft.trim()}
+                loading={addNote.isPending}
+                leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              >
+                Add note
+              </Button>
+            </div>
           </div>
         </Section>
       </Can>

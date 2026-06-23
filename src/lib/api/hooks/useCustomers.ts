@@ -45,20 +45,42 @@ export const customerDetailSchema = z
     customer_id: z.string().nullable().optional(),
     full_name: z.string().nullable().optional(),
     phone: z.string().nullable().optional(),
+    phone_verified: z.boolean().optional(),
     email: z.string().nullable().optional(),
+    email_verified: z.boolean().optional(),
+    gender: z.string().nullable().optional(),
+    date_of_birth: z.string().nullable().optional(),
     status: z.string().default("active"),
+    preferences: z
+      .object({
+        promo_sms_opt_in: z.boolean().optional(),
+        promo_email_opt_in: z.boolean().optional(),
+      })
+      .optional(),
     tags: z.array(z.string()).default([]),
     // The contract nests order metrics under `aggregates` on the 360 profile
-    // (unlike the flat list row). Flatten the three the view shows to the top.
+    // (unlike the flat list row). Flatten all five the view shows to the top.
     aggregates: z
       .object({
         order_count: z.number().optional(),
         total_spent: z.string().optional(),
+        avg_order_value: z.string().optional(),
+        first_order_at: z.string().nullable().optional(),
         last_order_at: z.string().nullable().optional(),
       })
       .partial()
       .optional(),
-    notes: z.array(z.object({ id: z.string().optional(), body: z.string(), created_at: z.string().optional() })).default([]),
+    notes: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          body: z.string(),
+          admin_id: z.string().optional(),
+          admin_name: z.string().nullable().optional(),
+          created_at: z.string().optional(),
+        }),
+      )
+      .default([]),
     recent_orders: z.array(z.object({ order_no: z.string(), grand_total: z.string().optional(), status: z.string().optional(), placed_at: z.string().optional() })).default([]),
     // Bound by the 360 detail view — were previously dropped (missing from the schema → stripped by zod).
     addresses: z
@@ -87,6 +109,7 @@ export const customerDetailSchema = z
     name: full_name ?? null,
     order_count: aggregates?.order_count,
     total_spent: aggregates?.total_spent,
+    first_order_at: aggregates?.first_order_at ?? null,
     last_order_at: aggregates?.last_order_at ?? null,
     ...rest,
   }));
@@ -133,7 +156,10 @@ export function useCustomerStatus(id: string) {
   const qc = useQueryClient();
   const invalidate = () => { qc.invalidateQueries({ queryKey: ["admin-customer", id] }); qc.invalidateQueries({ queryKey: ["admin-customers"] }); };
   return {
-    suspend: useMutation({ mutationFn: () => api.post(`/admin/customers/${id}/suspend`), onSuccess: invalidate }),
+    suspend: useMutation({
+      mutationFn: (body?: { reason?: string }) => api.post(`/admin/customers/${id}/suspend`, body ?? {}),
+      onSuccess: invalidate,
+    }),
     reactivate: useMutation({ mutationFn: () => api.post(`/admin/customers/${id}/reactivate`), onSuccess: invalidate }),
   };
 }

@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import {
   AlertTriangle,
   BadgeDollarSign,
+  BadgeCheck,
   ChevronRight,
   Heart,
   Info,
@@ -13,6 +14,7 @@ import {
   MapPin,
   ShoppingBag,
   ShoppingCart,
+  SquarePen,
   StickyNote,
   TrendingUp,
   User,
@@ -128,6 +130,7 @@ export function CustomerDetailView({ id }: { id: string }) {
 
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
+  const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Screen is hidden for admins without customers.customer.read.
   if (ready && !can(CUSTOMERS_READ_PERMISSION)) {
@@ -194,12 +197,9 @@ export function CustomerDetailView({ id }: { id: string }) {
   const isGuest = !data.id;
   const orderCount = data.order_count ?? 0;
   const totalSpent = data.total_spent ? Number(data.total_spent) : 0;
-  // AOV is derived from the two aggregates the API already returns (presentation
-  // only — not a new API field). Net-of-refunds note carried alongside LTV.
   const aov = orderCount > 0 ? Math.round(totalSpent / orderCount) : 0;
+  const firstOrder = data.first_order_at ? formatDate(data.first_order_at) : null;
   const lastOrder = data.last_order_at ? formatDate(data.last_order_at) : "—";
-  // TODO(design): first-order date is shown in the design but not returned by the
-  // customer 360 endpoint — omitted until the API exposes it.
 
   function onSuspendClick() {
     if (isDeleted) {
@@ -210,10 +210,7 @@ export function CustomerDetailView({ id }: { id: string }) {
   }
 
   function confirmSuspend() {
-    // The suspend mutation takes no body; the reason is captured for the audit
-    // trail on the server side when that field is wired.
-    // TODO(design): pass `suspendReason` once the suspend endpoint accepts it.
-    statusM.suspend.mutate(undefined, {
+    statusM.suspend.mutate(suspendReason.trim() ? { reason: suspendReason.trim() } : undefined, {
       onSuccess: () => {
         setSuspendOpen(false);
         setSuspendReason("");
@@ -273,20 +270,29 @@ export function CustomerDetailView({ id }: { id: string }) {
               {/* contact + verification line */}
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 {data.phone && (
-                  <span className="text-[12.5px] tabular-nums text-text-muted">
-                    {data.phone}
-                  </span>
+                  <>
+                    <span className="text-[12.5px] tabular-nums text-text-muted">{data.phone}</span>
+                    {data.phone_verified && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-success-50 px-1.5 py-px text-[11px] font-semibold text-success">
+                        <BadgeCheck className="h-3 w-3" aria-hidden="true" />
+                        Phone verified
+                      </span>
+                    )}
+                  </>
                 )}
-                {/* TODO(design): phone/email "verified" badges need verification
-                    flags from the API; not returned by the 360 endpoint today. */}
                 {data.phone && data.email && (
-                  <span
-                    className="h-[3px] w-[3px] rounded-full bg-border-strong"
-                    aria-hidden="true"
-                  />
+                  <span className="h-[3px] w-[3px] rounded-full bg-border-strong" aria-hidden="true" />
                 )}
                 {data.email && (
-                  <span className="break-all text-[12.5px] text-text-muted">{data.email}</span>
+                  <>
+                    <span className="break-all text-[12.5px] text-text-muted">{data.email}</span>
+                    {data.email_verified && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-success-50 px-1.5 py-px text-[11px] font-semibold text-success">
+                        <BadgeCheck className="h-3 w-3" aria-hidden="true" />
+                        Email verified
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -305,6 +311,16 @@ export function CustomerDetailView({ id }: { id: string }) {
           {/* action cluster — guests have no account actions */}
           {!isGuest && (
             <div className="flex flex-shrink-0 flex-wrap items-center gap-2.5">
+              <Can permission={CUSTOMERS_NOTE_PERMISSION}>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  leadingIcon={<SquarePen className="h-4 w-4" aria-hidden="true" />}
+                  onClick={() => noteTextareaRef.current?.focus()}
+                >
+                  Add note
+                </Button>
+              </Can>
               <Can permission={CUSTOMERS_SUSPEND_PERMISSION}>
                 {status === "suspended" || status === "locked" ? (
                   <Button
@@ -369,6 +385,12 @@ export function CustomerDetailView({ id }: { id: string }) {
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-text-faint">
               <Info className="h-3.5 w-3.5 text-border-strong" aria-hidden="true" />
+              {firstOrder && (
+                <>
+                  <span>First order {firstOrder}</span>
+                  <span className="h-[3px] w-[3px] rounded-full bg-border-strong" aria-hidden="true" />
+                </>
+              )}
               <span>Last order {lastOrder}</span>
               <span className="h-[3px] w-[3px] rounded-full bg-border-strong" aria-hidden="true" />
               <span>Total spent is net of refunds.</span>
@@ -443,9 +465,29 @@ export function CustomerDetailView({ id }: { id: string }) {
             <dl className="flex flex-col gap-3">
               <ContactRow label="Phone" value={data.phone ?? "—"} numeric />
               <ContactRow label="Email" value={data.email ?? "—"} breakAll />
-              {/* TODO(design): gender, date of birth, and communication opt-ins are
-                  shown in the design but not returned by the 360 endpoint today. */}
+              {data.gender && (
+                <ContactRow
+                  label="Gender"
+                  value={data.gender.charAt(0).toUpperCase() + data.gender.slice(1)}
+                />
+              )}
+              {data.date_of_birth && (
+                <ContactRow label="Date of birth" value={formatDate(data.date_of_birth)} />
+              )}
             </dl>
+            {(data.preferences?.promo_sms_opt_in !== undefined ||
+              data.preferences?.promo_email_opt_in !== undefined) && (
+              <>
+                <div className="my-3 h-px bg-surface-subtle" />
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-faint">
+                  Communication opt-ins
+                </p>
+                <dl className="flex flex-col gap-2.5">
+                  <OptInRow label="Order updates (SMS)" on={data.preferences?.promo_sms_opt_in ?? false} />
+                  <OptInRow label="Promotions (Email)" on={data.preferences?.promo_email_opt_in ?? false} />
+                </dl>
+              </>
+            )}
           </Card>
 
           {/* (6) ADDRESSES */}
@@ -477,7 +519,7 @@ export function CustomerDetailView({ id }: { id: string }) {
           </Card>
 
           {/* (7) INTERNAL NOTES */}
-          <NotesPanel customerId={data.id} notes={data.notes} />
+          <NotesPanel customerId={data.id} notes={data.notes} textareaRef={noteTextareaRef} />
         </div>
       </div>
 
@@ -500,14 +542,15 @@ export function CustomerDetailView({ id }: { id: string }) {
   );
 }
 
-/** Order history — all of the customer's orders (matched by phone), paginated via the shared footer. */
 /** Internal notes (FR-CUST-030/031) — append-only list + add form (never customer-visible). */
 function NotesPanel({
   customerId,
   notes,
+  textareaRef,
 }: {
   customerId: string;
-  notes: { id?: string; body: string; created_at?: string }[];
+  notes: { id?: string; body: string; admin_name?: string | null; created_at?: string }[];
+  textareaRef?: React.RefObject<HTMLTextAreaElement>;
 }) {
   const [draft, setDraft] = useState("");
   const add = useAddNote(customerId);
@@ -531,12 +574,36 @@ function NotesPanel({
         title="Internal notes"
         count={notes.length ? String(notes.length) : undefined}
       />
+      {notes.length === 0 ? (
+        <p className="mt-3 text-[12.5px] text-text-muted">No notes yet.</p>
+      ) : (
+        <ul className="mt-3 flex flex-col gap-2.5">
+          {notes.map((n, i) => (
+            <li key={n.id ?? i} className="rounded-lg border border-border bg-surface-hover p-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                {n.admin_name && (
+                  <span className="text-[12px] font-semibold text-text-secondary">
+                    {n.admin_name}
+                  </span>
+                )}
+                {n.created_at && (
+                  <span className="ml-auto text-[11px] tabular-nums text-text-faint">
+                    {formatDateTime(n.created_at)}
+                  </span>
+                )}
+              </div>
+              <p className="whitespace-pre-wrap text-[12.5px] text-text-secondary">{n.body}</p>
+            </li>
+          ))}
+        </ul>
+      )}
       <Can permission={CUSTOMERS_NOTE_PERMISSION}>
         <div className="mt-3">
           <textarea
+            ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            rows={3}
+            rows={2}
             placeholder="Add an internal note…"
             aria-label="Add an internal note"
             className="w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
@@ -549,22 +616,6 @@ function NotesPanel({
           </div>
         </div>
       </Can>
-      {notes.length === 0 ? (
-        <p className="mt-3 text-[12.5px] text-text-muted">No notes yet.</p>
-      ) : (
-        <ul className="mt-3 flex flex-col gap-2.5">
-          {notes.map((n, i) => (
-            <li key={n.id ?? i} className="rounded-lg border border-border bg-surface-hover p-3">
-              <p className="whitespace-pre-wrap text-[12.5px] text-text-secondary">{n.body}</p>
-              {n.created_at && (
-                <p className="mt-1 text-[11px] tabular-nums text-text-faint">
-                  {formatDateTime(n.created_at)}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
     </Card>
   );
 }
@@ -744,6 +795,27 @@ function ContactRow({
         )}
       >
         {value}
+      </dd>
+    </div>
+  );
+}
+
+function OptInRow({ label, on }: { label: string; on: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2.5">
+      <dt className="text-[13px] text-text-secondary">{label}</dt>
+      <dd
+        className={cn(
+          "flex items-center gap-1 text-[11.5px] font-semibold",
+          on ? "text-success" : "text-text-faint",
+        )}
+      >
+        {on ? (
+          <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <span className="inline-block h-3.5 w-3.5 rounded-full border border-current opacity-40" aria-hidden="true" />
+        )}
+        {on ? "On" : "Off"}
       </dd>
     </div>
   );

@@ -11,9 +11,9 @@ import {
 } from "@/components/charts";
 import { ChartCard, StatCard, type LegendItem } from "@/components/ui";
 import type { ReportMeta } from "./catalog";
+import { usePublishAsOf } from "./ReportAsOfContext";
 import { useReportParams } from "./ReportControls";
 import {
-  AsOf,
   Column,
   DataTable,
   ReportState,
@@ -31,6 +31,9 @@ import {
 export function SalesReport({ meta }: { meta: ReportMeta }) {
   const { apiParams, breakdown } = useReportParams(meta);
   const { data, isLoading, isError, refetch } = useSalesReport(apiParams);
+
+  // The "as of" stamp lives in the filter row per the design (C2 controls row).
+  usePublishAsOf(data?.as_of);
 
   const series = data?.series ?? [];
   const trend: TrendPoint[] = series.map((s) => ({
@@ -69,10 +72,6 @@ export function SalesReport({ meta }: { meta: ReportMeta }) {
       onRetry={refetch}
     >
       <div className="space-y-6">
-        <p className="text-xs text-text-muted">
-          Revenue is net of refunds; gross placed value is shown separately.
-        </p>
-
         {data?.totals && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCard
@@ -167,8 +166,6 @@ export function SalesReport({ meta }: { meta: ReportMeta }) {
             />
           </Section>
         )}
-
-        <AsOf value={data?.as_of} />
       </div>
     </ReportState>
   );

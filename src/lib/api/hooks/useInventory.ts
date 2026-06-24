@@ -96,6 +96,8 @@ export function useInventory(params: StockListParams) {
   const queryParams: Record<string, string | number | undefined> = {
     q: params.q,
     status: params.status,
+    // Forwarded for when the backend `category` filter ships; ignored until then.
+    category: params.category,
     page: params.page,
     limit: params.limit,
   };

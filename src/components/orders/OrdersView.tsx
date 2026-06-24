@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, Download, Search, X } from "lucide-react";
+import { Calendar, Check, Download, Search, X } from "lucide-react";
 import { useAdminOrders, type OrderRow } from "@/lib/api/hooks/useOrdersAdmin";
 import { OrdersExportButton } from "@/components/orders/OrdersExportButton";
 import { OrderRowMenu } from "@/components/orders/OrderRowMenu";
@@ -73,6 +73,21 @@ const SORT_ACCESSORS: Record<SortKey, (o: OrderRow) => string | number> = {
 const DEFAULT_SORT: SortKey = "placed";
 const DEFAULT_DIR: SortDir = "desc";
 
+/**
+ * Display labels for known payment methods (design renders "bKash"/"SSLCommerz"/
+ * "COD", not a naive uppercase). Unknown methods fall back to their upper-cased
+ * value so a new BE method still reads sensibly without a code change.
+ */
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  bkash: "bKash",
+  sslcommerz: "SSLCommerz",
+  cod: "COD",
+};
+function paymentMethodLabel(method?: string): string {
+  if (!method) return "—";
+  return PAYMENT_METHOD_LABELS[method.toLowerCase()] ?? method.toUpperCase();
+}
+
 function compareRows(a: OrderRow, b: OrderRow, key: SortKey, dir: SortDir): number {
   const av = SORT_ACCESSORS[key](a);
   const bv = SORT_ACCESSORS[key](b);
@@ -124,6 +139,7 @@ export function OrdersView() {
   const sp = useSearchParams();
   const status = sp.get("status") ?? "";
   const paymentState = sp.get("payment_state") ?? "";
+  const paymentMethod = sp.get("payment_method") ?? "";
   const q = sp.get("q") ?? "";
   const from = sp.get("from") ?? "";
   const to = sp.get("to") ?? "";
@@ -138,6 +154,10 @@ export function OrdersView() {
   const { data, isLoading, isError, refetch } = useAdminOrders({
     status: status || undefined,
     payment_state: paymentState || undefined,
+    // payment_method filter is not yet supported by GET /admin/orders (see brief
+    // briefs/safwan update api/ord-payment-method-filter-be.md) — sent so the wiring
+    // works the moment the BE adds it; ignored by the API until then.
+    payment_method: paymentMethod || undefined,
     q: q || undefined,
     from: from || undefined,
     to: to || undefined,
@@ -229,7 +249,7 @@ export function OrdersView() {
         <div>
           <h1 className="text-[22px] font-bold leading-7 text-text">Orders</h1>
           <p className="mt-0.5 text-sm text-text-muted">
-            Search, filter, and open orders for fulfilment.
+            Search, filter and open orders — start with the ones that need action.
           </p>
         </div>
         <OrdersExportButton
@@ -261,7 +281,7 @@ export function OrdersView() {
         <div className="w-full sm:w-64">
           <Input
             leadingIcon={<Search className="h-4 w-4" />}
-            placeholder="Search order no…"
+            placeholder="Search order no, customer name or phone…"
             aria-label="Search orders"
             defaultValue={q}
             onKeyDown={(e) =>
@@ -269,9 +289,27 @@ export function OrdersView() {
             }
           />
         </div>
+        {/* Status filter (design D) — shares the `status` URL param with the tabs
+            above, so the two stay in sync (selecting here moves the active tab). */}
         <div className="w-40">
           <Select
-            aria-label="Payment state"
+            aria-label="Filter by status"
+            value={status}
+            onChange={(e) => setFilter("status", e.target.value)}
+          >
+            <option value="">All status</option>
+            <option value="pending_payment">Pending payment</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="processing">Processing</option>
+            <option value="shipped">Shipped</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="refunded">Refunded</option>
+          </Select>
+        </div>
+        <div className="w-40">
+          <Select
+            aria-label="Filter by payment state"
             value={paymentState}
             onChange={(e) => setFilter("payment_state", e.target.value)}
           >
@@ -281,28 +319,45 @@ export function OrdersView() {
             <option value="cod_pending">COD pending</option>
           </Select>
         </div>
-        <label className="flex items-center gap-1.5 text-sm text-text-muted">
-          From
-          <Input
+        {/* Payment-method filter (design D) — not yet honoured by the backend
+            (no `payment_method` param on GET /admin/orders); see the BE brief. */}
+        <div className="w-40">
+          <Select
+            aria-label="Filter by payment method"
+            value={paymentMethod}
+            onChange={(e) => setFilter("payment_method", e.target.value)}
+          >
+            <option value="">All methods</option>
+            <option value="bkash">bKash</option>
+            <option value="sslcommerz">SSLCommerz</option>
+            <option value="cod">COD</option>
+          </Select>
+        </div>
+
+        {/* Date range — one bordered pill (design D) wrapping the two native date
+            pickers with a calendar icon + en-dash; same from/to URL params. */}
+        <div className="flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3">
+          <Calendar className="h-4 w-4 shrink-0 text-text-faint" aria-hidden="true" />
+          <input
             type="date"
-            className="w-auto"
             aria-label="Placed from"
             value={from}
             max={to || undefined}
             onChange={(e) => setFilter("from", e.target.value)}
+            className="w-[120px] border-0 bg-transparent p-0 text-sm tabular-nums text-text outline-none focus:outline-none focus-visible:outline-none"
           />
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-text-muted">
-          To
-          <Input
+          <span className="text-sm text-text-faint" aria-hidden="true">
+            –
+          </span>
+          <input
             type="date"
-            className="w-auto"
             aria-label="Placed to"
             value={to}
             min={from || undefined}
             onChange={(e) => setFilter("to", e.target.value)}
+            className="w-[120px] border-0 bg-transparent p-0 text-sm tabular-nums text-text outline-none focus:outline-none focus-visible:outline-none"
           />
-        </label>
+        </div>
 
         {/* Result count for the current filter (meta.total) — mirrors the design's
             "{N} orders" readout; aria-live so it's announced as filters change. */}
@@ -437,12 +492,14 @@ export function OrdersView() {
                         <StatusPill status={o.status} />
                       </TD>
                       <TD>
-                        <span className="block text-text-secondary">
-                          {o.payment_method?.toUpperCase() ?? "—"}
-                        </span>
-                        {o.payment_state && (
-                          <StatusPill status={o.payment_state} className="mt-0.5" />
-                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="whitespace-nowrap text-text-secondary">
+                            {paymentMethodLabel(o.payment_method)}
+                          </span>
+                          {o.payment_state && (
+                            <StatusPill status={o.payment_state} />
+                          )}
+                        </div>
                       </TD>
                       <TD numeric className="text-text">
                         {o.grand_total ? formatBDT(Number(o.grand_total)) : "—"}

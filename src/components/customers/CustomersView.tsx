@@ -58,14 +58,6 @@ const STATUS_LABEL: Record<string, string> = {
   deleted: "Deleted",
 };
 
-/** DD/MM/YYYY (toolbar input) → ISO YYYY-MM-DD for the API; undefined if blank/invalid (so no 400). */
-function ddmmyyyyToIso(v: string): string | undefined {
-  const m = v.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return undefined;
-  const [, d, mo, y] = m;
-  return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
-}
-
 function isoDaysAgo(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -135,8 +127,8 @@ export function CustomersView() {
     status: status || undefined,
     tag: tag || undefined,
     ...activityParams(activity),
-    registration_from: ddmmyyyyToIso(registeredFrom),
-    registration_to: ddmmyyyyToIso(registeredTo),
+    registration_from: registeredFrom || undefined,
+    registration_to: registeredTo || undefined,
     include_guests: includeGuests ? "true" : undefined,
     page,
     limit: pageSize,
@@ -244,10 +236,8 @@ export function CustomersView() {
     const params: Record<string, unknown> = { fields: cols, ...activityParams(activity) };
     if (q) params.q = q;
     if (status) params.status = status;
-    const regFrom = ddmmyyyyToIso(registeredFrom);
-    const regTo = ddmmyyyyToIso(registeredTo);
-    if (regFrom) params.registration_from = regFrom;
-    if (regTo) params.registration_to = regTo;
+    if (registeredFrom) params.registration_from = registeredFrom;
+    if (registeredTo) params.registration_to = registeredTo;
     startExport({ report_key: "customers_list", params, format: "csv" });
     toast("Preparing your CSV — it’ll download and appear in Exports.");
   }
@@ -334,35 +324,6 @@ export function CustomersView() {
           </Select>
         </div>
 
-        {/* Registration date-range (DD/MM/YYYY) */}
-        <div className="flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5">
-          <Calendar className="h-[15px] w-[15px] flex-shrink-0 text-text-faint" aria-hidden="true" />
-          <input
-            type="text"
-            inputMode="numeric"
-            aria-label="Registered from"
-            placeholder="DD/MM/YYYY"
-            defaultValue={registeredFrom}
-            onKeyDown={(e) =>
-              e.key === "Enter" &&
-              setParam("registered_from", (e.target as HTMLInputElement).value)
-            }
-            className="w-[88px] bg-transparent text-[13px] tabular-nums text-text placeholder:text-text-faint focus:outline-none"
-          />
-          <span className="text-[13px] text-text-faint">–</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            aria-label="Registered to"
-            placeholder="DD/MM/YYYY"
-            defaultValue={registeredTo}
-            onKeyDown={(e) =>
-              e.key === "Enter" && setParam("registered_to", (e.target as HTMLInputElement).value)
-            }
-            className="w-[88px] bg-transparent text-[13px] tabular-nums text-text placeholder:text-text-faint focus:outline-none"
-          />
-        </div>
-
         <div className="w-44">
           <Select
             aria-label="Filter by order activity"
@@ -376,6 +337,31 @@ export function CustomersView() {
             <option value="last_90d">Last order: 90d</option>
             <option value="last_1y">Last order: 1y+</option>
           </Select>
+        </div>
+
+        {/* Registration date-range — one bordered pill wrapping two native date
+            pickers with a calendar icon + en-dash; commits on change (URL-reflected). */}
+        <div className="flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5">
+          <Calendar className="h-[15px] w-[15px] flex-shrink-0 text-text-faint" aria-hidden="true" />
+          <input
+            type="date"
+            aria-label="Registered from"
+            value={registeredFrom}
+            max={registeredTo || undefined}
+            onChange={(e) => setParam("registered_from", e.target.value)}
+            className="w-[120px] border-0 bg-transparent p-0 text-[13px] tabular-nums text-text outline-none focus:outline-none focus-visible:outline-none"
+          />
+          <span className="text-[13px] text-text-faint" aria-hidden="true">
+            –
+          </span>
+          <input
+            type="date"
+            aria-label="Registered to"
+            value={registeredTo}
+            min={registeredFrom || undefined}
+            onChange={(e) => setParam("registered_to", e.target.value)}
+            className="w-[120px] border-0 bg-transparent p-0 text-[13px] tabular-nums text-text outline-none focus:outline-none focus-visible:outline-none"
+          />
         </div>
 
         {/* Include-guests toggle */}

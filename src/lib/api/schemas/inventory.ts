@@ -60,6 +60,13 @@ export type StockMutationResult = z.infer<typeof stockMutationResultSchema>;
 export interface StockListParams {
   q?: string;
   status?: StockStatus;
+  /**
+   * Product-family filter (design Stock §B). Forwarded to the API as `category`;
+   * harmless if the backend ignores it until the filter ships (brief:
+   * safwan-update-api/inv-category-filter-be.md), at which point the FE family
+   * fallback becomes a no-op.
+   */
+  category?: string;
   page?: number;
   limit?: number;
 }

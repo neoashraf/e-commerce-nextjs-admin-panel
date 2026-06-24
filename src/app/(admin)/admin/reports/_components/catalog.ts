@@ -49,6 +49,8 @@ export interface ReportMeta {
   hasTopN?: boolean;
   /** PDF export offered (CSV always). */
   pdf?: boolean;
+  /** Caption shown under the filter row (e.g. Sales' net-of-refunds note). */
+  controlsHelper?: string;
 }
 
 const BUCKETS: SelectOption[] = [
@@ -71,6 +73,8 @@ export const REPORT_CATALOG: ReportMeta[] = [
       { value: "category", label: "By category" },
       { value: "delivery_zone", label: "By zone" },
     ],
+    controlsHelper:
+      "Revenue is net of refunds; gross placed value is shown separately.",
     // TEMP (commented out per request, 2026-06-20): hides the "Export PDF" button
     // on the Sales report page. Re-enable by uncommenting. (Sales is the only
     // report with a PDF layout, so this is the only place PDF was offered.)

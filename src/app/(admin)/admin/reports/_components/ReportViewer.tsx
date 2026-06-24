@@ -10,6 +10,7 @@ import {
   REPORTS_SCHEDULE_PERMISSION,
   type ReportMeta,
 } from "./catalog";
+import { ReportAsOfProvider } from "./ReportAsOfContext";
 import { ReportControls } from "./ReportControls";
 import { SalesReport } from "./SalesReport";
 import { OrdersReport } from "./OrdersReport";
@@ -70,8 +71,10 @@ export function ReportViewer({ reportKey }: { reportKey: ReportKey }) {
         </div>
       </div>
 
-      <ReportControls meta={meta} />
-      <Body meta={meta} />
+      <ReportAsOfProvider>
+        <ReportControls meta={meta} />
+        <Body meta={meta} />
+      </ReportAsOfProvider>
     </div>
   );
 }

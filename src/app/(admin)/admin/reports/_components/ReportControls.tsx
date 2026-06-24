@@ -2,9 +2,25 @@
 
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Input, SegmentedControl, Select } from "@/components/ui";
+import { Input, Select } from "@/components/ui";
+import { formatDateTime } from "@/lib/format";
 import type { ReportMeta } from "./catalog";
 import { isoDaysAgo, rangeError, todayIso } from "./dates";
+import { useReportAsOf } from "./ReportAsOfContext";
+
+/** Uppercase eyebrow label for a control group (design C2 controls row). */
+function ControlLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-eyebrow uppercase tracking-wide text-text-muted">
+      {children}
+    </span>
+  );
+}
+
+/** Thin vertical divider between control groups (design C2). */
+function Divider() {
+  return <span className="h-6 w-px shrink-0 bg-border" aria-hidden="true" />;
+}
 
 /**
  * Report controls — period (from/to), bucket, breakdown, view, metric, top_n.
@@ -52,6 +68,7 @@ export function ReportControls({ meta }: { meta: ReportMeta }) {
   const sp = useSearchParams();
   const { from, to, bucket, breakdown, view, metric, topN } =
     useReportParams(meta);
+  const asOf = useReportAsOf();
 
   const setParam = useCallback(
     (key: string, value: string) => {
@@ -67,101 +84,122 @@ export function ReportControls({ meta }: { meta: ReportMeta }) {
   const showRange = meta.hasPeriod || view === "movement";
   const dateErr = showRange ? rangeError(from, to) : null;
 
+  // Whether a divider is needed between the date group and the selectors that
+  // follow it (bucket / breakdown / view / metric / top-N) — design C2.
+  const hasSelectors =
+    meta.hasBucket ||
+    !!meta.breakdowns ||
+    !!meta.views ||
+    !!meta.metrics ||
+    !!meta.hasTopN;
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         {showRange && (
-          <>
-            <label className="flex items-center gap-1.5 text-sm text-text-muted">
-              From
-              <Input
-                type="date"
-                className="w-auto"
-                aria-label="From date"
-                value={from}
-                max={to}
-                onChange={(e) => setParam("from", e.target.value)}
-              />
-            </label>
-            <label className="flex items-center gap-1.5 text-sm text-text-muted">
-              To
-              <Input
-                type="date"
-                className="w-auto"
-                aria-label="To date"
-                value={to}
-                min={from}
-                max={todayIso()}
-                onChange={(e) => setParam("to", e.target.value)}
-              />
-            </label>
-          </>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <ControlLabel>From</ControlLabel>
+            <Input
+              type="date"
+              className="w-auto tabular-nums"
+              aria-label="From date"
+              value={from}
+              max={to}
+              onChange={(e) => setParam("from", e.target.value)}
+            />
+            <span className="text-sm text-text-muted">–</span>
+            <ControlLabel>To</ControlLabel>
+            <Input
+              type="date"
+              className="w-auto tabular-nums"
+              aria-label="To date"
+              value={to}
+              min={from}
+              max={todayIso()}
+              onChange={(e) => setParam("to", e.target.value)}
+            />
+          </div>
         )}
 
+        {showRange && hasSelectors && <Divider />}
+
         {meta.hasBucket && (
-          <SegmentedControl
-            ariaLabel="Bucket"
-            value={bucket}
-            onChange={(v) => setParam("bucket", v)}
-            options={[
-              { value: "day", label: "Daily" },
-              { value: "week", label: "Weekly" },
-              { value: "month", label: "Monthly" },
-            ]}
-          />
+          <div className="flex items-center gap-2.5">
+            <ControlLabel>Bucket</ControlLabel>
+            <div className="w-32">
+              <Select
+                aria-label="Bucket"
+                value={bucket}
+                onChange={(e) => setParam("bucket", e.target.value)}
+              >
+                <option value="day">Daily</option>
+                <option value="week">Weekly</option>
+                <option value="month">Monthly</option>
+              </Select>
+            </div>
+          </div>
         )}
 
         {meta.breakdowns && (
-          <div className="w-44">
-            <Select
-              aria-label="Breakdown"
-              value={breakdown}
-              onChange={(e) => setParam("breakdown", e.target.value)}
-            >
-              {meta.breakdowns.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+          <div className="flex items-center gap-2.5">
+            <ControlLabel>Breakdown</ControlLabel>
+            <div className="w-44">
+              <Select
+                aria-label="Breakdown"
+                value={breakdown}
+                onChange={(e) => setParam("breakdown", e.target.value)}
+              >
+                {meta.breakdowns.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
         )}
 
         {meta.views && (
-          <div className="w-44">
-            <Select
-              aria-label="View"
-              value={view}
-              onChange={(e) => setParam("view", e.target.value)}
-            >
-              {meta.views.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+          <div className="flex items-center gap-2.5">
+            <ControlLabel>View</ControlLabel>
+            <div className="w-44">
+              <Select
+                aria-label="View"
+                value={view}
+                onChange={(e) => setParam("view", e.target.value)}
+              >
+                {meta.views.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
         )}
 
         {meta.metrics && (
-          <div className="w-36">
-            <Select
-              aria-label="Metric"
-              value={metric}
-              onChange={(e) => setParam("metric", e.target.value)}
-            >
-              {meta.metrics.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+          <div className="flex items-center gap-2.5">
+            <ControlLabel>Metric</ControlLabel>
+            <div className="w-36">
+              <Select
+                aria-label="Metric"
+                value={metric}
+                onChange={(e) => setParam("metric", e.target.value)}
+              >
+                {meta.metrics.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
         )}
 
         {meta.hasTopN && (
-          <label className="flex items-center gap-1.5 text-sm text-text-muted">
-            Top
+          <div className="flex items-center gap-2.5">
+            <ControlLabel>Top</ControlLabel>
             <Input
               type="number"
               min={1}
@@ -171,9 +209,22 @@ export function ReportControls({ meta }: { meta: ReportMeta }) {
               value={topN}
               onChange={(e) => setParam("top_n", e.target.value)}
             />
-          </label>
+          </div>
+        )}
+
+        {asOf && (
+          <span
+            aria-live="polite"
+            className="ml-auto whitespace-nowrap text-xs tabular-nums text-text-muted"
+          >
+            as of {formatDateTime(asOf)}
+          </span>
         )}
       </div>
+
+      {meta.controlsHelper && (
+        <p className="text-xs text-text-muted">{meta.controlsHelper}</p>
+      )}
 
       {dateErr && (
         <p role="alert" className="text-sm text-error">

@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import type { StockStatus } from "@/lib/api/schemas/inventory";
+import { Select } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { CATEGORY_OPTIONS } from "./shared";
 
 const STATUS_OPTIONS: { value: "" | StockStatus; label: string; dot?: string }[] = [
   { value: "", label: "All" },
@@ -20,13 +22,15 @@ const STATUS_OPTIONS: { value: "" | StockStatus; label: string; dot?: string }[]
 export function StockFilters({
   q,
   status,
+  category,
   resultLabel,
   onChange,
 }: {
   q: string;
   status: string;
+  category: string;
   resultLabel?: string;
-  onChange: (patch: { q?: string; status?: string; page?: string }) => void;
+  onChange: (patch: { q?: string; status?: string; category?: string; page?: string }) => void;
 }) {
   const [search, setSearch] = useState(q);
 
@@ -88,6 +92,25 @@ export function StockFilters({
             </button>
           );
         })}
+      </div>
+
+      {/* Product/family filter (design Stock §B). URL-driven via `category`. */}
+      <label className="sr-only" htmlFor="stock-category">
+        Filter by product or family
+      </label>
+      <div className="w-40">
+        <Select
+          id="stock-category"
+          className="font-medium text-text-secondary"
+          value={category}
+          onChange={(e) => onChange({ category: e.target.value || undefined, page: undefined })}
+        >
+          {CATEGORY_OPTIONS.map((o) => (
+            <option key={o.value || "all"} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
       </div>
 
       {resultLabel && (

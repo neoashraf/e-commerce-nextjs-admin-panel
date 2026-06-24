@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useEditorFamily, useAttributes, useAttribute } from "@/lib/api/hooks/useCatalog";
 import type { AttributeRow, FamilyAttribute } from "@/lib/api/schemas/catalog";
 
@@ -26,39 +27,69 @@ const SELECT_TYPES = new Set(["select", "multiselect"]);
 
 type AttrValue = string | string[] | boolean;
 
+/**
+ * Standard sport attributes always shown in the editor (matches the design's
+ * Attributes section and the SRS seeded attributes, Appendix B). Codes use the
+ * SRS canonical codes so saved values map to the real attribute model. These are
+ * rendered for every product; any further family-specific attributes are appended
+ * below (deduped by code).
+ */
+const STANDARD_ATTRIBUTES: {
+  code: string;
+  label: string;
+  kind: "select" | "multiselect";
+  options: string[];
+  required?: boolean;
+}[] = [
+  { code: "gender", label: "Gender", kind: "select", options: ["Men", "Women", "Unisex", "Kids"], required: true },
+  { code: "sport", label: "Sport", kind: "multiselect", options: ["Football", "Futsal", "Turf", "Running", "Training", "Lifestyle"], required: true },
+  { code: "surface_type", label: "Surface / Ground", kind: "multiselect", options: ["Firm Ground (FG)", "Soft Ground (SG)", "Artificial Grass (AG)", "Turf (TF)", "Indoor (IC)"], required: true },
+  { code: "material", label: "Upper Material", kind: "select", options: ["Synthetic", "Leather", "Knit", "Mesh"], required: true },
+  { code: "tier", label: "Performance Tier", kind: "select", options: ["Elite", "Pro", "Academy", "Club"], required: true },
+  { code: "product_type", label: "Product Type", kind: "select", options: ["Boots", "Shoes", "Cleats", "Trainers"], required: true },
+];
+const STANDARD_CODES = new Set(STANDARD_ATTRIBUTES.map((a) => a.code));
+
 export function FamilyAttributesSection({
   familyId,
   values,
   onChange,
+  embedded = false,
 }: {
   familyId: string;
   values: Record<string, AttrValue>;
   onChange: (code: string, value: AttrValue) => void;
+  /** When true, render bare content (no outer card/heading) — the editor wraps it. */
+  embedded?: boolean;
 }) {
-  const { data: family, isLoading } = useEditorFamily(familyId);
+  const { data: family } = useEditorFamily(familyId);
   // Full attribute list → is_required + id keyed by code (capped at the BE max).
   const { data: attrList } = useAttributes({ limit: 200 });
 
-  if (!familyId) return null;
-  if (isLoading) return <div className="h-24 animate-pulse rounded-lg bg-gray-100" />;
-  if (!family) return null;
-
   const byCode = new Map<string, AttributeRow>((attrList?.data ?? []).map((a) => [a.code, a]));
 
-  // Flatten the family's groups into the custom (non-handled) attributes.
-  const custom: FamilyAttribute[] = family.groups
+  // Extra family attributes beyond the standard sport set (and beyond the system
+  // fields the editor handles elsewhere) — appended after the standard six.
+  const extra: FamilyAttribute[] = (family?.groups ?? [])
     .flatMap((g) => g.attributes)
-    .filter((a) => !HANDLED_CODES.has(a.code));
+    .filter((a) => !HANDLED_CODES.has(a.code) && !STANDARD_CODES.has(a.code));
 
-  if (custom.length === 0) return null;
-
-  return (
-    <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
-      <h2 className="text-base font-semibold text-gray-900">Attributes</h2>
-      <p className="text-xs text-gray-500">
-        These come from the product&apos;s family. Required ones must be filled before publishing.
+  const body = (
+    <>
+      <p className="text-[12.5px] leading-relaxed text-text-muted">
+        Product specs &amp; configurable attributes. Required ones must be filled before publishing.
       </p>
-      {custom.map((attr) => (
+      {/* Standard sport attributes — always shown (matches the design). */}
+      {STANDARD_ATTRIBUTES.map((a) => (
+        <StandardField
+          key={a.code}
+          def={a}
+          value={values[a.code]}
+          onChange={(v) => onChange(a.code, v)}
+        />
+      ))}
+      {/* Any further family-specific attributes (deduped against the standard set). */}
+      {extra.map((attr) => (
         <AttributeField
           key={attr.code}
           attr={attr}
@@ -67,7 +98,81 @@ export function FamilyAttributesSection({
           onChange={(v) => onChange(attr.code, v)}
         />
       ))}
+    </>
+  );
+
+  if (embedded) return <div className="flex flex-col gap-4">{body}</div>;
+
+  return (
+    <section className="space-y-4 rounded-xl border border-border bg-surface p-5">
+      <h2 className="text-base font-semibold text-text">Attributes</h2>
+      {body}
     </section>
+  );
+}
+
+/** Self-contained renderer for a standard attribute (no per-attribute fetch):
+ * select → dropdown, multiselect → check chips. Matches the design's fields. */
+function StandardField({
+  def,
+  value,
+  onChange,
+}: {
+  def: { code: string; label: string; kind: "select" | "multiselect"; options: string[]; required?: boolean };
+  value: AttrValue | undefined;
+  onChange: (v: AttrValue) => void;
+}) {
+  const label = (
+    <span className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+      {def.label}
+      {def.required && <span className="text-error">*</span>}
+    </span>
+  );
+
+  if (def.kind === "multiselect") {
+    const selected = Array.isArray(value) ? value : [];
+    return (
+      <fieldset className="block">
+        {label}
+        <div className="flex flex-wrap gap-2">
+          {def.options.map((o) => {
+            const on = selected.includes(o);
+            return (
+              <button
+                key={o}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onChange(on ? selected.filter((v) => v !== o) : [...selected, o])}
+                className={
+                  "inline-flex select-none items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1 " +
+                  (on ? "border-accent-600 bg-accent-50 text-accent-700" : "border-border-strong text-text-secondary hover:bg-surface-subtle")
+                }
+              >
+                {on && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                {o}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+    );
+  }
+
+  return (
+    <label className="block">
+      {label}
+      <select
+        className="h-[38px] w-full max-w-[340px] cursor-pointer rounded-lg border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
+        value={typeof value === "string" ? value : ""}
+        onChange={(e) => onChange(e.target.value)}
+        aria-required={def.required}
+      >
+        <option value="">Select…</option>
+        {def.options.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -85,25 +190,25 @@ function AttributeField({
   const required = meta?.is_required ?? false;
   const type = attr.type;
   const label = (
-    <span className="mb-1 block text-sm font-medium text-gray-900">
+    <span className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
       {attr.admin_label}
-      {required && <span className="text-red-500"> *</span>}
+      {required && <span className="text-error">*</span>}
     </span>
   );
   const field =
-    "h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
+    "h-[38px] w-full max-w-[340px] rounded-lg border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1";
 
   if (type === "boolean") {
     return (
-      <label className="flex items-center gap-2 text-sm text-gray-700">
+      <label className="flex items-center gap-2 text-sm text-text-secondary">
         <input
           type="checkbox"
-          className="h-4 w-4"
+          className="h-4 w-4 rounded border-border-strong text-accent-600 focus-visible:ring-accent-600"
           checked={value === true}
           onChange={(e) => onChange(e.target.checked)}
         />
         {attr.admin_label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <span className="text-error"> *</span>}
       </label>
     );
   }
@@ -113,7 +218,7 @@ function AttributeField({
       <label className="block">
         {label}
         <textarea
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-border-strong bg-surface px-3 py-2.5 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
           rows={3}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
@@ -187,35 +292,29 @@ function SelectField({
       <fieldset className="block">
         {label}
         {isLoading ? (
-          <p className="text-xs text-gray-400">Loading options…</p>
+          <p className="text-xs text-text-faint">Loading options…</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {options.map((o) => {
               const on = selected.includes(o.value);
               return (
-                <label
+                <button
                   key={o.value}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() =>
+                    onChange(on ? selected.filter((v) => v !== o.value) : [...selected, o.value])
+                  }
                   className={
-                    "cursor-pointer rounded-full border px-3 py-1 text-sm " +
+                    "inline-flex select-none items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1 " +
                     (on
-                      ? "border-brand-500 bg-brand-50 text-brand-700"
-                      : "border-gray-300 text-gray-600")
+                      ? "border-accent-600 bg-accent-50 text-accent-700"
+                      : "border-border-strong text-text-secondary hover:bg-surface-subtle")
                   }
                 >
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={on}
-                    onChange={(e) =>
-                      onChange(
-                        e.target.checked
-                          ? [...selected, o.value]
-                          : selected.filter((v) => v !== o.value),
-                      )
-                    }
-                  />
+                  {on && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
                   {o.label}
-                </label>
+                </button>
               );
             })}
           </div>
@@ -228,7 +327,7 @@ function SelectField({
     <label className="block">
       {label}
       <select
-        className={field}
+        className={field + " cursor-pointer"}
         value={typeof value === "string" ? value : ""}
         onChange={(e) => onChange(e.target.value)}
         aria-required={required}

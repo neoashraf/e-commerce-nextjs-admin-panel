@@ -40,17 +40,43 @@ const envelopeSchema = z.object({
   meta: z.unknown().optional(),
 });
 
-/** Platform error envelope: { error: { code, message, details } }. */
+/**
+ * Platform error envelope: { error: { code, message, details } }. `details` is
+ * usually a field-error array, but some errors carry a structured object instead
+ * (e.g. 409 CATEGORY_HAS_DEPENDENTS → { child_categories, published_products }),
+ * so accept either and let {@link errorFromPayload} split them.
+ */
 const errorEnvelopeSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
     details: z
-      .array(z.object({ field: z.string().optional(), message: z.string() }))
+      .union([
+        z.array(z.object({ field: z.string().optional(), message: z.string() })),
+        z.record(z.unknown()),
+      ])
       .optional(),
     retry_after: z.number().optional(),
   }),
 });
+
+/**
+ * Build a typed {@link ApiError} from a non-2xx response body. An array `details`
+ * becomes `ApiError.details` (field errors); an object `details` becomes
+ * `ApiError.context` (structured payload). Falls back to an UNKNOWN error when the
+ * body isn't the platform envelope.
+ */
+function errorFromPayload(status: number, payload: unknown, fallback: string): ApiError {
+  const parsed = errorEnvelopeSchema.safeParse(payload);
+  if (!parsed.success) return new ApiError(status, "UNKNOWN", fallback);
+  const { code, message, details } = parsed.data.error;
+  const fields = Array.isArray(details) ? (details as ApiErrorDetail[]) : [];
+  const context =
+    details && !Array.isArray(details) && typeof details === "object"
+      ? (details as Record<string, unknown>)
+      : null;
+  return new ApiError(status, code, message, fields, context);
+}
 
 function buildUrl(
   path: string,
@@ -114,17 +140,7 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const parsed = errorEnvelopeSchema.safeParse(payload);
-    if (parsed.success) {
-      const { code, message, details } = parsed.data.error;
-      throw new ApiError(
-        res.status,
-        code,
-        message,
-        (details as ApiErrorDetail[]) ?? [],
-      );
-    }
-    throw new ApiError(res.status, "UNKNOWN", res.statusText || "Request failed.");
+    throw errorFromPayload(res.status, payload, res.statusText || "Request failed.");
   }
 
   // Success — unwrap the { data } envelope and optionally validate. When
@@ -194,12 +210,7 @@ async function requestForm<T>(
   }
 
   if (!res.ok) {
-    const parsed = errorEnvelopeSchema.safeParse(payload);
-    if (parsed.success) {
-      const { code, message, details } = parsed.data.error;
-      throw new ApiError(res.status, code, message, (details as ApiErrorDetail[]) ?? []);
-    }
-    throw new ApiError(res.status, "UNKNOWN", res.statusText || "Request failed.");
+    throw errorFromPayload(res.status, payload, res.statusText || "Request failed.");
   }
 
   const env_ = envelopeSchema.safeParse(payload);
@@ -220,9 +231,53 @@ async function requestForm<T>(
   return data as T;
 }
 
+/**
+ * Authenticated file download (e.g. the products CSV export, which the backend returns as a raw
+ * `text/csv` body, not the JSON envelope). Attaches the Bearer token, parses the error envelope the
+ * same way as `request`, and returns the body as a Blob plus the filename from `Content-Disposition`.
+ */
+async function requestBlob(
+  path: string,
+  opts: { params?: RequestOptions<unknown>["params"]; signal?: AbortSignal } = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  const headers: Record<string, string> = {};
+  const token = getAccessToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, opts.params), {
+      method: "GET",
+      headers,
+      signal: opts.signal,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "NETWORK_ERROR", "Could not reach the server.", []);
+  }
+
+  if (res.status === 401) useAuthStore.getState().clear();
+
+  if (!res.ok) {
+    let payload: unknown;
+    try {
+      payload = await res.json();
+    } catch {
+      throw new ApiError(res.status, "UNKNOWN", res.statusText || "Request failed.");
+    }
+    throw errorFromPayload(res.status, payload, res.statusText || "Request failed.");
+  }
+
+  const disposition = res.headers.get("Content-Disposition");
+  const match = disposition?.match(/filename="?([^"]+)"?/i);
+  return { blob: await res.blob(), filename: match ? match[1] : null };
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions<T>) =>
     request<T>("GET", path, undefined, opts),
+  download: (path: string, opts?: { params?: RequestOptions<unknown>["params"]; signal?: AbortSignal }) =>
+    requestBlob(path, opts),
   postForm: <T>(path: string, form: FormData, opts?: RequestOptions<T>) =>
     requestForm<T>(path, form, opts),
   post: <T>(path: string, body?: Json, opts?: RequestOptions<T>) =>

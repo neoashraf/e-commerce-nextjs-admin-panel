@@ -75,10 +75,9 @@ export const REPORT_CATALOG: ReportMeta[] = [
     ],
     controlsHelper:
       "Revenue is net of refunds; gross placed value is shown separately.",
-    // TEMP (commented out per request, 2026-06-20): hides the "Export PDF" button
-    // on the Sales report page. Re-enable by uncommenting. (Sales is the only
-    // report with a PDF layout, so this is the only place PDF was offered.)
-    // pdf: true,
+    // Sales offers an "Export PDF" (formatted report) alongside CSV, per the RPT
+    // Sales design header (C1). Sales is the only report with a printable PDF layout.
+    pdf: true,
   },
   {
     key: "orders",

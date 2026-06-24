@@ -53,6 +53,16 @@ export const salesSchema = z.object({
       orders: z.number(),
       units: z.number().optional(),
       aov: z.string().optional(),
+      /**
+       * Period-over-period deltas (signed %). The design's KPI cards show a
+       * "+12.4% vs last period" chip per metric; the running backend doesn't
+       * return these yet (brief: safwan update api/rpt-sales-design-fields-be.md),
+       * so they're optional — the FE renders a chip only when a value is present
+       * and degrades to no chip otherwise.
+       */
+      net_revenue_delta_pct: z.number().nullable().optional(),
+      orders_delta_pct: z.number().nullable().optional(),
+      aov_delta_pct: z.number().nullable().optional(),
     })
     .optional(),
   series: z

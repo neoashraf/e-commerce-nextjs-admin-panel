@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, Receipt, ShoppingCart, Wallet } from "lucide-react";
+import { Banknote, Layers, Receipt, ShoppingCart } from "lucide-react";
 import { useSalesReport } from "@/lib/api/hooks/reports";
 import { formatBDT } from "@/lib/format";
 import {
@@ -9,27 +9,44 @@ import {
   TrendChart,
   type TrendPoint,
 } from "@/components/charts";
-import { ChartCard, StatCard, type LegendItem } from "@/components/ui";
+import {
+  Card,
+  CardFooter,
+  CardHeader,
+  ChartCard,
+  StatCard,
+  Table,
+  TableTotalsRow,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  type LegendItem,
+} from "@/components/ui";
 import type { ReportMeta } from "./catalog";
 import { usePublishAsOf } from "./ReportAsOfContext";
 import { useReportParams } from "./ReportControls";
-import {
-  Column,
-  DataTable,
-  ReportState,
-  Section,
-  TotalsRow,
-} from "./primitives";
+import { Column, DataTable, ReportState, TotalsRow } from "./primitives";
+
+/** Bucket → adverb used in the chart subtitle (design C4). */
+const BUCKET_WORD: Record<string, string> = {
+  day: "daily",
+  week: "weekly",
+  month: "monthly",
+};
 
 /**
- * Sales report (FR-RPT-010/011), re-skinned to the design system. StatCard
- * totals, a revenue/orders trend ChartCard (restrained palette + "Show data"
- * table), the selected breakdown as a bar ChartCard, and a by-period table with
- * a totals row. The tables are the accessible equivalents of the charts.
- * Presentation only — the hook + params are unchanged.
+ * Sales report (FR-RPT-010/011), re-skinned to the `Reports - Sales (RPT)`
+ * design. StatCard totals carry period-over-period delta chips (BE-optional, so
+ * they degrade to no chip), a revenue/orders trend ChartCard with a caption +
+ * "Show data" table, the selected breakdown as a bar ChartCard, and a "By
+ * period" card whose header shows the row count and whose footer echoes
+ * "Showing N of N" (design C5). The tables are the accessible equivalents of the
+ * charts. The hook + URL params are unchanged.
  */
 export function SalesReport({ meta }: { meta: ReportMeta }) {
-  const { apiParams, breakdown } = useReportParams(meta);
+  const { apiParams, breakdown, bucket } = useReportParams(meta);
   const { data, isLoading, isError, refetch } = useSalesReport(apiParams);
 
   // The "as of" stamp lives in the filter row per the design (C2 controls row).
@@ -64,6 +81,13 @@ export function SalesReport({ meta }: { meta: ReportMeta }) {
     { label: "Orders", color: CHART_COLORS[1] },
   ];
 
+  // Chart captions (design C4). The trend card always plots net revenue +
+  // orders; the breakdown (when active) is its own bar card below, so each
+  // card's caption describes what that card actually shows.
+  const bucketWord = BUCKET_WORD[bucket] ?? "daily";
+  const breakdownLabel = meta.breakdowns?.find((b) => b.value === breakdown)?.label;
+  const trendSubtitle = `Net revenue (৳) and orders · ${bucketWord}`;
+
   return (
     <ReportState
       isLoading={isLoading}
@@ -78,12 +102,13 @@ export function SalesReport({ meta }: { meta: ReportMeta }) {
               label="Net revenue"
               value={formatBDT(Number(data.totals.net_revenue))}
               icon={Banknote}
+              delta={data.totals.net_revenue_delta_pct}
             />
             {data.totals.gross_placed_value != null && (
               <StatCard
                 label="Gross placed"
                 value={formatBDT(Number(data.totals.gross_placed_value))}
-                icon={Wallet}
+                icon={Layers}
                 iconTone="info"
               />
             )}
@@ -91,12 +116,14 @@ export function SalesReport({ meta }: { meta: ReportMeta }) {
               label="Orders"
               value={String(data.totals.orders)}
               icon={ShoppingCart}
+              delta={data.totals.orders_delta_pct}
             />
             {data.totals.aov != null && (
               <StatCard
                 label="Avg order value"
                 value={formatBDT(Number(data.totals.aov))}
                 icon={Receipt}
+                delta={data.totals.aov_delta_pct}
               />
             )}
           </div>
@@ -105,6 +132,7 @@ export function SalesReport({ meta }: { meta: ReportMeta }) {
         {trend.length > 0 && (
           <ChartCard
             title="Over time"
+            subtitle={trendSubtitle}
             legend={trendLegend}
             dataTable={
               <DataTable
@@ -130,7 +158,8 @@ export function SalesReport({ meta }: { meta: ReportMeta }) {
 
         {breakdownRows.length > 0 && (
           <ChartCard
-            title={`By ${breakdown.replace(/_/g, " ")}`}
+            title={breakdownLabel ?? `By ${breakdown.replace(/_/g, " ")}`}
+            subtitle={`Gross revenue · ${bucketWord}`}
             dataTable={
               <DataTable
                 caption={`Sales by ${breakdown}`}
@@ -148,23 +177,66 @@ export function SalesReport({ meta }: { meta: ReportMeta }) {
         )}
 
         {series.length > 0 && (
-          <Section title="By period">
-            <DataTable
-              caption="Sales by period"
-              columns={seriesCols}
-              rows={series}
-              rowKey={(s) => s.bucket}
-              totalRow={
-                <TotalsRow
-                  cells={[
-                    { content: "Total" },
-                    { content: formatBDT(totalRevenue), align: "right" },
-                    { content: totalOrders, align: "right" },
-                  ]}
-                />
+          <Card>
+            <CardHeader
+              title="By period"
+              divider
+              action={
+                <span className="text-xs tabular-nums text-text-muted">
+                  {series.length} {series.length === 1 ? "row" : "rows"}
+                </span>
               }
             />
-          </Section>
+            <Table>
+              <caption className="sr-only">Sales by period</caption>
+              <THead>
+                <TR hover={false}>
+                  <TH>Period</TH>
+                  <TH numeric>Revenue ({"৳"})</TH>
+                  <TH numeric>Orders</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {series.map((s) => {
+                  const revenue = Number(s.net_revenue);
+                  return (
+                    <TR key={s.bucket}>
+                      <TD className="tabular-nums whitespace-nowrap">{s.bucket}</TD>
+                      <TD
+                        numeric
+                        className={
+                          "font-semibold " +
+                          (revenue < 0 ? "text-error" : "text-text")
+                        }
+                      >
+                        {formatBDT(revenue)}
+                      </TD>
+                      <TD numeric className="text-text">
+                        {s.orders}
+                      </TD>
+                    </TR>
+                  );
+                })}
+                <TableTotalsRow>
+                  <td className="px-4 py-3">Total</td>
+                  <td
+                    className={
+                      "px-4 py-3 text-right tabular-nums " +
+                      (totalRevenue < 0 ? "text-error" : "")
+                    }
+                  >
+                    {formatBDT(totalRevenue)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {totalOrders}
+                  </td>
+                </TableTotalsRow>
+              </TBody>
+            </Table>
+            <CardFooter>
+              Showing {series.length} of {series.length}
+            </CardFooter>
+          </Card>
         )}
       </div>
     </ReportState>

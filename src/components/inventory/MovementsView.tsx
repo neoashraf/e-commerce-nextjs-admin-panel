@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Calendar, ChevronRight, Cpu, ExternalLink, History } from "lucide-react";
 import {
@@ -10,6 +10,7 @@ import {
   type Movement,
 } from "@/lib/api/hooks/useInventory";
 import { formatDateTime } from "@/lib/format";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { StockThumb } from "@/app/(admin)/admin/inventory/_components/StockThumb";
 import { optionsLabel, STATUS_LABEL } from "@/app/(admin)/admin/inventory/_components/shared";
 import {
@@ -20,6 +21,7 @@ import {
   SkeletonRows,
   StatusPill,
   Table,
+  TablePagination,
   TBody,
   TD,
   TH,
@@ -154,6 +156,21 @@ export function MovementsView({ variantId }: { variantId: string }) {
   }, [data, typeFilter, from, to]);
 
   const total = data?.length ?? 0;
+
+  // Client-side pager over the filtered rows (design Movements footer; FR-INV-051).
+  // The endpoint returns a plain array (no meta.total), so paging is in-memory over the
+  // already-fetched, then type/date-filtered set. Reset to page 1 whenever the filtered
+  // count or page size shrinks the result below the current window.
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  useEffect(() => {
+    if (page > pageCount) setPage(1);
+  }, [page, pageCount]);
+  const pageRows = useMemo(
+    () => rows.slice((page - 1) * pageSize, page * pageSize),
+    [rows, page, pageSize],
+  );
 
   // Newest entry's resulting on-hand ≈ the SKU's current on-hand (fallback when no cache).
   const newestOnHand = useMemo(() => {
@@ -315,7 +332,7 @@ export function MovementsView({ variantId }: { variantId: string }) {
               </TR>
             </THead>
             <TBody>
-              {rows.map((m) => {
+              {pageRows.map((m) => {
                 const up = m.quantity_delta >= 0;
                 const orderLabel = m.order_no ?? m.order_id ?? null;
                 const isSystem = (m.actor_type ?? "").toLowerCase() === "system";
@@ -374,6 +391,17 @@ export function MovementsView({ variantId }: { variantId: string }) {
               })}
             </TBody>
           </Table>
+          {/* ===== D. PAGINATION FOOTER (design Movements §D) ===== */}
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            total={rows.length}
+            onPageChange={setPage}
+            onPageSizeChange={(s) => {
+              setPageSize(s);
+              setPage(1);
+            }}
+          />
         </Card>
       )}
     </div>

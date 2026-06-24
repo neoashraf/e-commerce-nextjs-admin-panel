@@ -2,7 +2,9 @@
 
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Calendar } from "lucide-react";
 import { Input, Select } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/format";
 import type { ReportMeta } from "./catalog";
 import { isoDaysAgo, rangeError, todayIso } from "./dates";
@@ -20,6 +22,51 @@ function ControlLabel({ children }: { children: React.ReactNode }) {
 /** Thin vertical divider between control groups (design C2). */
 function Divider() {
   return <span className="h-6 w-px shrink-0 bg-border" aria-hidden="true" />;
+}
+
+/**
+ * Compact date control matching the design's bordered date "button" (C2): a
+ * 36px field sized to its content (not full-width) with a trailing calendar
+ * glyph, so From/To sit inline on one row instead of stacking. The shared
+ * `Input` always wraps itself in a `w-full` div, which forced the date fields to
+ * span the row and wrap; this renders a self-contained, content-width control.
+ */
+function DateField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min?: string;
+  max?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative inline-flex items-center">
+      <input
+        type="date"
+        aria-label={label}
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "h-9 rounded-md border border-border-strong bg-surface pl-3 pr-9 text-sm tabular-nums text-text",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1",
+          // Hide the native calendar picker indicator; we render our own glyph
+          // so every browser reads identically to the design.
+          "[&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-9 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0",
+        )}
+      />
+      <Calendar
+        className="pointer-events-none absolute right-2.5 h-4 w-4 text-text-faint"
+        aria-hidden="true"
+      />
+    </div>
+  );
 }
 
 /**
@@ -97,26 +144,22 @@ export function ReportControls({ meta }: { meta: ReportMeta }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         {showRange && (
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2.5">
             <ControlLabel>From</ControlLabel>
-            <Input
-              type="date"
-              className="w-auto tabular-nums"
-              aria-label="From date"
+            <DateField
+              label="From date"
               value={from}
               max={to}
-              onChange={(e) => setParam("from", e.target.value)}
+              onChange={(v) => setParam("from", v)}
             />
             <span className="text-sm text-text-muted">–</span>
             <ControlLabel>To</ControlLabel>
-            <Input
-              type="date"
-              className="w-auto tabular-nums"
-              aria-label="To date"
+            <DateField
+              label="To date"
               value={to}
               min={from}
               max={todayIso()}
-              onChange={(e) => setParam("to", e.target.value)}
+              onChange={(v) => setParam("to", v)}
             />
           </div>
         )}

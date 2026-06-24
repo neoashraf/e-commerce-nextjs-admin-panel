@@ -59,6 +59,21 @@ type AttrValue = string | string[] | boolean;
 const labelCls = "flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted";
 const inputCls = "h-[38px] w-full rounded-lg border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1";
 
+/**
+ * Turn a 400 ApiError into something the admin can act on. The backend already
+ * sends a specific, human-readable message (e.g. UNKNOWN_OPTION →
+ * `"Unisex" is not a valid option for attribute "gender".`); a class-validator
+ * failure instead sends a `details` field array (VALIDATION_ERROR). Prefer the
+ * field details, then the backend message, and only fall back to generic copy
+ * when the backend gave us nothing useful — never swallow the real reason.
+ */
+function saveErrorMessage(err: ApiError): string {
+  const fields = err.details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).filter(Boolean);
+  if (fields.length) return `Check the fields — ${fields.join("; ")}`;
+  if (err.message && err.code !== "UNKNOWN") return err.message;
+  return "Check the fields — a required value may be missing or invalid.";
+}
+
 export function ProductEditor({
   mode,
   product,
@@ -110,6 +125,11 @@ export function ProductEditor({
     setAttrValues((prev) => ({ ...prev, [code]: value }));
     markDirty();
   };
+  // Attribute codes the chosen family allows (reported by FamilyAttributesSection
+  // once the family loads). Used to strip family-foreign values before save so the
+  // backend never rejects with ATTRIBUTE_NOT_IN_FAMILY. Undefined = family not yet
+  // known → don't filter.
+  const [allowedAttrCodes, setAllowedAttrCodes] = useState<Set<string> | undefined>(undefined);
 
   const skuLocked = mode === "edit";
   const familyLabel = families?.find((f) => f.id === familyId)?.name ?? familyId;
@@ -180,6 +200,14 @@ export function ProductEditor({
     });
   }
 
+  // Only submit attributes the family allows. Until the family's allowed-code set
+  // is known we send everything as before (the backend still validates); once known
+  // we drop family-foreign codes so a stale value (e.g. `material` on the Default
+  // family) can't trigger ATTRIBUTE_NOT_IN_FAMILY.
+  const submittableAttrs: Record<string, AttrValue> = allowedAttrCodes
+    ? Object.fromEntries(Object.entries(attrValues).filter(([code]) => allowedAttrCodes.has(code)))
+    : attrValues;
+
   // Fields shared by create + update. `type` / `family_id` are immutable and only
   // belong in the create body — the update DTO rejects them.
   function buildBody(): Record<string, unknown> {
@@ -197,7 +225,7 @@ export function ProductEditor({
       meta_title: metaTitle.trim() || undefined,
       meta_keywords: metaKeywords.trim() || undefined,
       meta_description: metaDesc.trim() || undefined,
-      attributes: Object.keys(attrValues).length ? attrValues : undefined,
+      attributes: Object.keys(submittableAttrs).length ? submittableAttrs : undefined,
     };
   }
 
@@ -217,10 +245,12 @@ export function ProductEditor({
         toast("Product saved.");
       }
     } catch (err) {
+      // STALE_WRITE needs the dedicated reload banner; everything else surfaces
+      // as an error toast (the backend's specific reason for a 400).
       if (err instanceof ApiError && err.code === "STALE_WRITE") setStale(true);
-      else if (err instanceof ApiError && err.status === 409) setError("That SKU already exists.");
-      else if (err instanceof ApiError && err.status === 400) setError("Check the fields — a required value may be missing or invalid.");
-      else setError("Something went wrong. Try again.");
+      else if (err instanceof ApiError && err.status === 409) toast("That SKU already exists.", "error");
+      else if (err instanceof ApiError && err.status === 400) toast(saveErrorMessage(err), "error");
+      else toast("Something went wrong. Try again.", "error");
     }
   }
 
@@ -396,7 +426,7 @@ export function ProductEditor({
 
               {/* ATTRIBUTES */}
               <Section id="attributes" title="Attributes" icon={Tags} setRef={(el) => (sectionRefs.current.attributes = el)}>
-                <FamilyAttributesSection familyId={familyId} values={attrValues} onChange={setAttr} embedded />
+                <FamilyAttributesSection familyId={familyId} values={attrValues} onChange={setAttr} onAllowedCodes={setAllowedAttrCodes} embedded />
               </Section>
 
               {/* IMAGES & VIDEOS */}

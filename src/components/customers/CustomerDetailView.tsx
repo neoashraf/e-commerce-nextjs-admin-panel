@@ -25,6 +25,7 @@ import {
   useCustomer,
   useCustomerStatus,
   useAddNote,
+  useCustomerNotes,
   useCustomerWishlist,
 } from "@/lib/api/hooks/useCustomers";
 import { useAdminOrders } from "@/lib/api/hooks/useOrdersAdmin";
@@ -518,8 +519,8 @@ export function CustomerDetailView({ id }: { id: string }) {
             )}
           </Card>
 
-          {/* (7) INTERNAL NOTES */}
-          <NotesPanel customerId={data.id} notes={data.notes} textareaRef={noteTextareaRef} />
+          {/* (7) INTERNAL NOTES — fetched from the dedicated /notes endpoint (not on the 360 payload) */}
+          <NotesPanel customerId={data.id} textareaRef={noteTextareaRef} />
         </div>
       </div>
 
@@ -542,18 +543,18 @@ export function CustomerDetailView({ id }: { id: string }) {
   );
 }
 
-/** Internal notes (FR-CUST-030/031) — append-only list + add form (never customer-visible). */
+/** Internal notes (FR-CUST-030/031) — append-only list + add form (never customer-visible).
+ * Notes are NOT on the 360 payload; they're fetched from GET /admin/customers/{id}/notes. */
 function NotesPanel({
   customerId,
-  notes,
   textareaRef,
 }: {
   customerId: string;
-  notes: { id?: string; body: string; admin_name?: string | null; created_at?: string }[];
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
 }) {
   const [draft, setDraft] = useState("");
   const add = useAddNote(customerId);
+  const { data: notes = [], isLoading, isError, refetch } = useCustomerNotes(customerId);
 
   function submit() {
     const body = draft.trim();
@@ -574,7 +575,14 @@ function NotesPanel({
         title="Internal notes"
         count={notes.length ? String(notes.length) : undefined}
       />
-      {notes.length === 0 ? (
+      {isLoading ? (
+        <div className="mt-3 space-y-2.5">
+          <Skeleton className="h-16 rounded-lg" />
+          <Skeleton className="h-16 rounded-lg" />
+        </div>
+      ) : isError ? (
+        <ErrorState description="Couldn’t load notes." onRetry={() => refetch()} />
+      ) : notes.length === 0 ? (
         <p className="mt-3 text-[12.5px] text-text-muted">No notes yet.</p>
       ) : (
         <ul className="mt-3 flex flex-col gap-2.5">

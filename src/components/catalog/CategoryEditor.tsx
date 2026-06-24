@@ -307,9 +307,16 @@ export function CategoryEditor({
       toast("Category saved.");
       router.push("/admin/categories");
     } catch (err) {
-      if (err instanceof ApiError && err.status === 400)
-        setError("Check the fields — the name may be invalid, the depth too deep, or an attribute code unknown.");
-      else setError("Something went wrong. Please try again.");
+      if (err instanceof ApiError && err.status === 400) {
+        // Surface the backend's specific reason (e.g. UNKNOWN_OPTION → which
+        // attribute code) instead of swallowing it behind generic copy.
+        const fields = err.details
+          .map((d) => (d.field ? `${d.field}: ${d.message}` : d.message))
+          .filter(Boolean);
+        if (fields.length) setError(`Check the fields — ${fields.join("; ")}`);
+        else if (err.message && err.code !== "UNKNOWN") setError(err.message);
+        else setError("Check the fields — the name may be invalid, the depth too deep, or an attribute code unknown.");
+      } else setError("Something went wrong. Please try again.");
     }
   }
 

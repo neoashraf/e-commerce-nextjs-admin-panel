@@ -70,17 +70,8 @@ export const customerDetailSchema = z
       })
       .partial()
       .optional(),
-    notes: z
-      .array(
-        z.object({
-          id: z.string().optional(),
-          body: z.string(),
-          admin_id: z.string().optional(),
-          admin_name: z.string().nullable().optional(),
-          created_at: z.string().optional(),
-        }),
-      )
-      .default([]),
+    // NOTE: the 360 profile does NOT carry notes — the contract serves them from the
+    // dedicated GET /admin/customers/{id}/notes endpoint (see `useCustomerNotes` below).
     recent_orders: z.array(z.object({ order_no: z.string(), grand_total: z.string().optional(), status: z.string().optional(), placed_at: z.string().optional() })).default([]),
     // Bound by the 360 detail view — were previously dropped (missing from the schema → stripped by zod).
     addresses: z
@@ -145,11 +136,39 @@ export function useCustomer(id: string) {
     staleTime: 30_000,
   });
 }
+/**
+ * Internal notes (FR-CUST-030). The 360 profile does not carry notes; the contract
+ * serves them from a dedicated endpoint (GET /admin/customers/{id}/notes → NoteDto[]),
+ * so the detail view reads them here rather than off the profile payload.
+ */
+export const customerNoteSchema = z.object({
+  id: z.string().optional(),
+  body: z.string(),
+  admin_id: z.string().optional(),
+  admin_name: z.string().nullable().optional(),
+  created_at: z.string().optional(),
+});
+export type CustomerNote = z.infer<typeof customerNoteSchema>;
+const customerNoteListSchema = z.array(customerNoteSchema);
+
+export function useCustomerNotes(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ["admin-customer-notes", id] as const,
+    enabled: enabled && !!id,
+    queryFn: (): Promise<CustomerNote[]> =>
+      api.get(`/admin/customers/${id}/notes`, { schema: customerNoteListSchema }) as Promise<CustomerNote[]>,
+    staleTime: 30_000,
+  });
+}
+
 export function useAddNote(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: string) => api.post(`/admin/customers/${id}/notes`, { body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-customer", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-customer-notes", id] });
+      qc.invalidateQueries({ queryKey: ["admin-customer", id] });
+    },
   });
 }
 export function useCustomerStatus(id: string) {

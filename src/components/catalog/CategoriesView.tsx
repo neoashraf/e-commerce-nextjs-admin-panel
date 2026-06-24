@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -494,6 +495,7 @@ function CategoryRow({
   const canReorder = !isDeleted && !searching;
 
   const [dragOver, setDragOver] = useState<null | "before" | "after">(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -677,21 +679,12 @@ function CategoryRow({
         </span>
       </td>
 
-      {/* ACTIONS: Edit + ••• menu */}
+      {/* ACTIONS: ••• menu (Edit lives at the top of the dropdown) */}
       <td className="relative w-[118px] pr-3.5 text-right align-middle" onClick={(e) => e.stopPropagation()}>
         {!isDeleted && (
-          <div className="inline-flex items-center gap-1">
-            <Can permission="catalog.category.update">
-              <Link
-                href={`/admin/categories/${node.id}`}
-                aria-label={`Edit ${node.name}`}
-                className="inline-flex h-[30px] items-center gap-1.5 rounded-md border border-border-strong bg-surface px-[11px] text-[12.5px] font-semibold text-text-secondary hover:bg-surface-subtle"
-              >
-                <SquarePen className="h-[15px] w-[15px]" />
-                Edit
-              </Link>
-            </Can>
+          <div className="inline-flex items-center justify-end">
             <button
+              ref={triggerRef}
               type="button"
               onClick={() => onMenuOpen(node.id)}
               aria-label={`More actions for ${node.name}`}
@@ -709,6 +702,7 @@ function CategoryRow({
 
         {menuOpen && (
           <RowMenu
+            anchorRef={triggerRef}
             node={node}
             atMaxDepth={atMaxDepth}
             onPublish={() => onPublish(node)}
@@ -724,24 +718,78 @@ function CategoryRow({
 /* --------------------------- ••• MENU --------------------------- */
 
 function RowMenu({
+  anchorRef,
   node,
   atMaxDepth,
   onPublish,
   onShowInMenu,
   onDelete,
 }: {
+  anchorRef: React.RefObject<HTMLButtonElement>;
   node: CategoryNode;
   atMaxDepth: boolean;
   onPublish: () => void;
   onShowInMenu: () => void;
   onDelete: () => void;
 }) {
-  return (
+  // Width must match min-w below so right-alignment with the trigger is exact.
+  const MENU_WIDTH = 194;
+  const GAP = 6; // px gap between trigger and menu (matches the old top-9 feel)
+
+  const [pos, setPos] = useState<{ left: number; top: number; openUp: boolean } | null>(null);
+
+  // Position against the trigger in viewport coords (position: fixed). Recompute
+  // synchronously before paint, and again on scroll/resize so the menu stays
+  // glued to its row instead of escaping the table's overflow container.
+  useLayoutEffect(() => {
+    function place() {
+      const el = anchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      // Right-align the menu's right edge to the trigger's right edge.
+      const left = Math.max(8, r.right - MENU_WIDTH);
+      const spaceBelow = window.innerHeight - r.bottom;
+      // Edit + publish/hide + add-sub + delete + dividers ≈ 280px; flip up if it
+      // wouldn't fit below (and there's room above).
+      const openUp = spaceBelow < 280 && r.top > 280;
+      const top = openUp ? r.top - GAP : r.bottom + GAP;
+      setPos({ left, top, openUp });
+    }
+    place();
+    window.addEventListener("scroll", place, true); // capture: catch inner scrollers too
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [anchorRef]);
+
+  if (pos === null) return null;
+
+  return createPortal(
     <div
       role="menu"
-      className="absolute right-2 top-9 z-30 min-w-[194px] rounded-lg border border-border bg-surface p-[5px] text-left shadow-md"
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: "fixed",
+        left: pos.left,
+        top: pos.top,
+        width: MENU_WIDTH,
+        transform: pos.openUp ? "translateY(-100%)" : undefined,
+      }}
+      className="z-50 rounded-lg border border-border bg-surface p-[5px] text-left shadow-md"
     >
       <Can permission="catalog.category.update">
+        <Link
+          href={`/admin/categories/${node.id}`}
+          role="menuitem"
+          aria-label={`Edit ${node.name}`}
+          className="flex h-[34px] w-full items-center gap-[9px] rounded-md px-2.5 text-left text-[13px] text-text-secondary hover:bg-surface-subtle"
+        >
+          <SquarePen className="h-4 w-4" />
+          Edit
+        </Link>
+        <div className="mx-1.5 my-1 h-px bg-surface-subtle" />
         <button
           type="button"
           role="menuitem"
@@ -803,7 +851,8 @@ function RowMenu({
           Delete
         </button>
       </Can>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

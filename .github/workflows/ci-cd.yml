@@ -1,4 +1,4 @@
-```yaml
+
 name: CI/CD — Admin Panel
 
 on:
@@ -190,4 +190,4 @@ jobs:
 
             echo "Deployment completed successfully"
           EOF
-```
+

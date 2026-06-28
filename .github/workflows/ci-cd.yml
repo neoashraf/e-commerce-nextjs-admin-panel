@@ -45,11 +45,11 @@ jobs:
         id: vars
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "NEXT_PUBLIC_API_URL=${{ secrets.PROD_API_URL }}" >> $GITHUB_OUTPUT
-            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.PROD_SITE_URL }}" >> $GITHUB_OUTPUT
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.PROD_API_URL }}"   >> "$GITHUB_OUTPUT"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.PROD_SITE_URL }}" >> "$GITHUB_OUTPUT"
           else
-            echo "NEXT_PUBLIC_API_URL=${{ secrets.DEV_API_URL }}" >> $GITHUB_OUTPUT
-            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.DEV_SITE_URL }}" >> $GITHUB_OUTPUT
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.DEV_API_URL }}"    >> "$GITHUB_OUTPUT"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.DEV_SITE_URL }}"  >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build
@@ -67,28 +67,23 @@ jobs:
       contents: read
       packages: write
 
-    outputs:
-      image_name: ${{ steps.image.outputs.IMAGE_NAME }}
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare image name
-        id: image
-        run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
-          echo "IMAGE_NAME=$IMAGE" >> $GITHUB_ENV
-          echo "IMAGE_NAME=$IMAGE" >> $GITHUB_OUTPUT
-
-      - name: Resolve build-time env vars
+      - name: Resolve vars
         id: vars
         run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE_NAME=${IMAGE}" >> "$GITHUB_OUTPUT"
+
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "NEXT_PUBLIC_API_URL=${{ secrets.PROD_API_URL }}" >> $GITHUB_OUTPUT
-            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.PROD_SITE_URL }}" >> $GITHUB_OUTPUT
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.PROD_API_URL }}"   >> "$GITHUB_OUTPUT"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.PROD_SITE_URL }}" >> "$GITHUB_OUTPUT"
+            echo "IMAGE_TAG=${IMAGE}:main-latest"                     >> "$GITHUB_OUTPUT"
           else
-            echo "NEXT_PUBLIC_API_URL=${{ secrets.DEV_API_URL }}" >> $GITHUB_OUTPUT
-            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.DEV_SITE_URL }}" >> $GITHUB_OUTPUT
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.DEV_API_URL }}"    >> "$GITHUB_OUTPUT"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.DEV_SITE_URL }}"  >> "$GITHUB_OUTPUT"
+            echo "IMAGE_TAG=${IMAGE}:dev-latest"                      >> "$GITHUB_OUTPUT"
           fi
 
       - uses: docker/setup-buildx-action@v3
@@ -104,7 +99,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ steps.vars.outputs.IMAGE_NAME }}
           tags: |
             type=sha,format=long
             type=raw,value=${{ github.ref_name }}-latest
@@ -132,79 +127,106 @@ jobs:
       packages: read
 
     steps:
-      - name: Prepare image name
-        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-
-      - name: Set deployment variables
+      - name: Resolve deployment vars
+        id: cfg
         run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "VPS_HOST=${{ secrets.VPS_HOST }}"           >> $GITHUB_ENV
-            echo "VPS_USER=${{ secrets.VPS_USER }}"           >> $GITHUB_ENV
-            echo "VPS_SSH_KEY<<EOF"                            >> $GITHUB_ENV
-            printf '%s\n' "${{ secrets.VPS_SSH_KEY }}"        >> $GITHUB_ENV
-            echo "EOF"                                         >> $GITHUB_ENV
-            echo "NEXT_PUBLIC_API_URL=${{ secrets.PROD_API_URL }}"   >> $GITHUB_ENV
-            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.PROD_SITE_URL }}" >> $GITHUB_ENV
-            echo "IMAGE_TAG=${{ env.IMAGE_NAME }}:main-latest" >> $GITHUB_ENV
-            echo "ENVIRONMENT=production"                      >> $GITHUB_ENV
+            echo "VPS_HOST=${{ secrets.VPS_HOST }}"                  >> "$GITHUB_OUTPUT"
+            echo "VPS_USER=${{ secrets.VPS_USER }}"                  >> "$GITHUB_OUTPUT"
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.PROD_API_URL }}"   >> "$GITHUB_OUTPUT"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.PROD_SITE_URL }}" >> "$GITHUB_OUTPUT"
+            echo "IMAGE_TAG=${IMAGE}:main-latest"                     >> "$GITHUB_OUTPUT"
+            echo "ENVIRONMENT=production"                             >> "$GITHUB_OUTPUT"
           else
-            echo "VPS_HOST=${{ secrets.DEV_VPS_HOST }}"       >> $GITHUB_ENV
-            echo "VPS_USER=${{ secrets.DEV_VPS_USER }}"       >> $GITHUB_ENV
-            echo "VPS_SSH_KEY<<EOF"                            >> $GITHUB_ENV
-            printf '%s\n' "${{ secrets.DEV_VPS_SSH_KEY }}"    >> $GITHUB_ENV
-            echo "EOF"                                         >> $GITHUB_ENV
-            echo "NEXT_PUBLIC_API_URL=${{ secrets.DEV_API_URL }}"    >> $GITHUB_ENV
-            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.DEV_SITE_URL }}"  >> $GITHUB_ENV
-            echo "IMAGE_TAG=ghcr.io/${GITHUB_REPOSITORY,,}:dev-latest" >> $GITHUB_ENV
-            echo "ENVIRONMENT=development"                     >> $GITHUB_ENV
+            echo "VPS_HOST=${{ secrets.DEV_VPS_HOST }}"              >> "$GITHUB_OUTPUT"
+            echo "VPS_USER=${{ secrets.DEV_VPS_USER }}"              >> "$GITHUB_OUTPUT"
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.DEV_API_URL }}"    >> "$GITHUB_OUTPUT"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.DEV_SITE_URL }}"  >> "$GITHUB_OUTPUT"
+            echo "IMAGE_TAG=${IMAGE}:dev-latest"                      >> "$GITHUB_OUTPUT"
+            echo "ENVIRONMENT=development"                            >> "$GITHUB_OUTPUT"
+          fi
+
+          # SSH key written to output via multiline delimiter
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            {
+              echo "VPS_SSH_KEY<<__SSHEOF__"
+              printf '%s' "${{ secrets.VPS_SSH_KEY }}"
+              echo ""
+              echo "__SSHEOF__"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "VPS_SSH_KEY<<__SSHEOF__"
+              printf '%s' "${{ secrets.DEV_VPS_SSH_KEY }}"
+              echo ""
+              echo "__SSHEOF__"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Validate secrets
         run: |
-          [ -z "$VPS_HOST" ]    && echo "VPS_HOST missing"    && exit 1
-          [ -z "$VPS_USER" ]    && echo "VPS_USER missing"    && exit 1
-          [ -z "$VPS_SSH_KEY" ] && echo "VPS_SSH_KEY missing" && exit 1
-          [ -z "$NEXT_PUBLIC_API_URL" ]  && echo "API_URL missing"  && exit 1
-          [ -z "$NEXT_PUBLIC_SITE_URL" ] && echo "SITE_URL missing" && exit 1
-          echo "All secrets present — deploying to $ENVIRONMENT"
+          FAILED=0
+          [ -z "${{ steps.cfg.outputs.VPS_HOST }}" ]            && echo "❌ VPS_HOST is missing"            && FAILED=1
+          [ -z "${{ steps.cfg.outputs.VPS_USER }}" ]            && echo "❌ VPS_USER is missing"            && FAILED=1
+          [ -z "${{ steps.cfg.outputs.VPS_SSH_KEY }}" ]         && echo "❌ VPS_SSH_KEY is missing"         && FAILED=1
+          [ -z "${{ steps.cfg.outputs.NEXT_PUBLIC_API_URL }}" ] && echo "❌ NEXT_PUBLIC_API_URL is missing" && FAILED=1
+          [ -z "${{ steps.cfg.outputs.NEXT_PUBLIC_SITE_URL }}" ]&& echo "❌ NEXT_PUBLIC_SITE_URL is missing"&& FAILED=1
+          [ $FAILED -eq 1 ] && exit 1
+          echo "✅ All secrets present — deploying to ${{ steps.cfg.outputs.ENVIRONMENT }}"
 
-      - name: Deploy to ${{ env.ENVIRONMENT }} server
+      - name: Deploy
+        env:
+          VPS_HOST:    ${{ steps.cfg.outputs.VPS_HOST }}
+          VPS_USER:    ${{ steps.cfg.outputs.VPS_USER }}
+          VPS_SSH_KEY: ${{ steps.cfg.outputs.VPS_SSH_KEY }}
+          IMAGE_TAG:   ${{ steps.cfg.outputs.IMAGE_TAG }}
+          API_URL:     ${{ steps.cfg.outputs.NEXT_PUBLIC_API_URL }}
+          SITE_URL:    ${{ steps.cfg.outputs.NEXT_PUBLIC_SITE_URL }}
+          ENVIRONMENT: ${{ steps.cfg.outputs.ENVIRONMENT }}
+          CONTAINER:   ${{ env.CONTAINER_NAME }}
+          GHCR_USER:   ${{ github.actor }}
+          GHCR_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
-            GHCR_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
-            GHCR_USER="${{ github.actor }}" \
-            IMAGE_TAG="$IMAGE_TAG" \
-            CONTAINER="$CONTAINER_NAME" \
-            API_URL="$NEXT_PUBLIC_API_URL" \
-            SITE_URL="$NEXT_PUBLIC_SITE_URL" \
-            bash -s << 'ENDSSH'
-              set -e
+          echo "🚀 Deploying $IMAGE_TAG to $ENVIRONMENT ($VPS_USER@$VPS_HOST)"
 
-              echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=yes \
+              -o BatchMode=yes \
+              "$VPS_USER@$VPS_HOST" \
+              GHCR_TOKEN="$GHCR_TOKEN" \
+              GHCR_USER="$GHCR_USER" \
+              IMAGE_TAG="$IMAGE_TAG" \
+              CONTAINER="$CONTAINER" \
+              API_URL="$API_URL" \
+              SITE_URL="$SITE_URL" \
+              ENVIRONMENT="$ENVIRONMENT" \
+              bash -s << 'ENDSSH'
+            set -e
 
-              docker pull "$IMAGE_TAG"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-              docker rm -f "$CONTAINER" || true
+            docker pull "$IMAGE_TAG"
 
-              docker run -d \
-                --name "$CONTAINER" \
-                -p 6002:3002 \
-                -e NEXT_PUBLIC_API_URL="$API_URL" \
-                -e NEXT_PUBLIC_SITE_URL="$SITE_URL" \
-                --restart unless-stopped \
-                "$IMAGE_TAG"
+            docker rm -f "$CONTAINER" || true
 
-              sleep 10
-              docker ps --filter "name=$CONTAINER" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            docker run -d \
+              --name "$CONTAINER" \
+              -p 6002:3002 \
+              -e NEXT_PUBLIC_API_URL="$API_URL" \
+              -e NEXT_PUBLIC_SITE_URL="$SITE_URL" \
+              --restart unless-stopped \
+              "$IMAGE_TAG"
 
-              echo "--- Recent logs ---"
-              docker logs --tail=50 "$CONTAINER"
-
-              docker image prune -f
-              echo "✅ Deployment to $ENVIRONMENT completed"
-ENDSSH
+            sleep 10
+            docker ps --filter "name=$CONTAINER" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            echo "--- Recent logs ---"
+            docker logs --tail=50 "$CONTAINER"
+            docker image prune -f
+            echo "✅ Deployment to $ENVIRONMENT completed"

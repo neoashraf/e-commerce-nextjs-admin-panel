@@ -400,7 +400,7 @@ export function CustomerDetailView({ id }: { id: string }) {
 
           {/* (2) ORDER HISTORY — paginated 10/page from the orders endpoint (by phone). */}
           {data.phone ? (
-            <CustomerOrderHistory phone={data.phone} name={name} />
+            <CustomerOrderHistory customerId={data.id} phone={data.phone} name={name} />
           ) : (
             <Card className="overflow-hidden">
               <div className="px-[18px] pb-3 pt-[15px]">
@@ -704,10 +704,17 @@ function WishlistPanel({ customerId, count }: { customerId: string; count: numbe
   );
 }
 
-function CustomerOrderHistory({ phone, name }: { phone: string; name: string }) {
+function CustomerOrderHistory({ customerId, phone, name }: { customerId: string; phone?: string | null; name: string }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  const { data, isLoading, isError, refetch } = useAdminOrders({ phone, page, limit: pageSize });
+  // Fetch by customer_id (authoritative for a registered buyer) — so linked orders show even when an
+  // order shipped to a different recipient phone — plus the phone, which also pulls in guest orders.
+  const { data, isLoading, isError, refetch } = useAdminOrders({
+    customer_id: customerId,
+    phone: phone ?? undefined,
+    page,
+    limit: pageSize,
+  });
   const orders = data?.data ?? [];
   const total = data?.meta.total ?? 0;
 

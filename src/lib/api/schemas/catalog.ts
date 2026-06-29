@@ -196,6 +196,8 @@ export const productRowSchema = z.object({
   status: productStatusSchema.default("draft"),
   primary_category: z.string().nullable().optional(),
   qty: z.number().nullable().optional(),
+  // Live stock status from INV (joined on the admin list) — shown next to qty, like the inventory page.
+  qty_status: z.enum(["in_stock", "low_stock", "out_of_stock"]).nullable().optional(),
 });
 export type ProductRow = z.infer<typeof productRowSchema>;
 export const productListSchema = z.array(productRowSchema);
@@ -264,7 +266,13 @@ export const adminProductVideoSchema = z.object({
 export type AdminProductVideo = z.infer<typeof adminProductVideoSchema>;
 
 /** `{ id }` returned by POST /admin/products/{id}/videos. */
-export const addVideoResultSchema = z.object({ id: z.string() });
+export const addVideoResultSchema = z.object({
+  id: z.string(),
+  // Backend now returns the stored video link (Cloudinary URL for an upload) + source/order.
+  source: z.string().optional(),
+  url: z.string().optional(),
+  display_order: z.number().optional(),
+});
 
 /** One linked product item (GET /admin/products/{id} → links.{related,up_sell,cross_sell}[]). */
 export const productLinkItemSchema = z.object({

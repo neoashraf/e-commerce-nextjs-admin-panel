@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArrowUpCircle, Download, Pencil, Search, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpCircle, Download, Pencil, Search, Trash2 } from "lucide-react";
 import {
   useProducts,
   useProductStatus,
@@ -57,6 +57,12 @@ function flattenCategories(
     ...flattenCategories(n.children ?? [], depth + 1),
   ]);
 }
+
+/** Stock-status presentation for the QTY cell — same short labels + tones as the inventory page. */
+type QtyStatus = "in_stock" | "low_stock" | "out_of_stock";
+const QTY_STATUS_LABEL: Record<QtyStatus, string> = { in_stock: "In stock", low_stock: "Low", out_of_stock: "Out" };
+const QTY_NUM_TONE: Record<QtyStatus, string> = { in_stock: "text-text", low_stock: "text-warning", out_of_stock: "text-error" };
+const QTY_LABEL_TONE: Record<QtyStatus, string> = { in_stock: "text-text-muted", low_stock: "text-warning", out_of_stock: "text-error" };
 
 const TYPE_SEGMENTS = [
   { value: "", label: "All" },
@@ -154,6 +160,15 @@ export function ProductsView() {
       } else {
         toast("Couldn't publish. Try again.", "error");
       }
+    }
+  }
+  async function unarchive(p: ProductRow) {
+    try {
+      // Bring an archived product back as a draft — admin reviews + re-publishes from there.
+      await statusM.mutateAsync({ id: p.id, status: "draft" });
+      toast("Product unarchived — it's now a draft.");
+    } catch {
+      toast("Couldn't unarchive. Try again.", "error");
     }
   }
   async function runConfirm() {
@@ -290,7 +305,22 @@ export function ProductsView() {
                       </div>
                     </TD>
                     <TD numeric className="text-text">{p.base_price ? formatBDT(Number(p.base_price)) : "—"}</TD>
-                    <TD numeric>{p.qty == null ? <span title="Stock unavailable" className="text-text-faint">—</span> : p.qty}</TD>
+                    <TD numeric>
+                      {p.qty == null ? (
+                        <span title="Stock unavailable" className="text-text-faint">—</span>
+                      ) : (
+                        <span className="inline-flex flex-col items-end leading-tight">
+                          <span className={`font-medium tabular-nums ${QTY_NUM_TONE[p.qty_status ?? "in_stock"]}`}>
+                            {p.qty}
+                          </span>
+                          {p.qty_status && (
+                            <span className={`text-[11px] ${QTY_LABEL_TONE[p.qty_status]}`}>
+                              {QTY_STATUS_LABEL[p.qty_status]}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </TD>
                     <TD><StatusPill status={p.status} /></TD>
                     <TD>{p.primary_category ?? "—"}</TD>
                     <TD><Badge tone="neutral" className="capitalize">{p.type ?? "simple"}</Badge></TD>
@@ -329,6 +359,17 @@ export function ProductsView() {
                                   >
                                     <Archive className="h-4 w-4 text-text-muted" aria-hidden="true" />
                                     Archive
+                                  </button>
+                                )}
+                                {p.status === "archived" && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { close(); unarchive(p); }}
+                                    className={menuItemCls}
+                                  >
+                                    <ArchiveRestore className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                                    Unarchive
                                   </button>
                                 )}
                               </Can>

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
+  ArchiveRestore,
   ArrowUpCircle,
   Box,
   Download,
@@ -293,6 +294,15 @@ export function ProductsView() {
       }
     }
   }
+  async function unarchive(p: ProductRow) {
+    try {
+      // Bring an archived product back as a draft — admin reviews + re-publishes from there.
+      await statusM.mutateAsync({ id: p.id, status: "draft" });
+      toast("Product unarchived — it's now a draft.");
+    } catch {
+      toast("Couldn't unarchive. Try again.", "error");
+    }
+  }
   async function runConfirm() {
     if (!confirm) return;
     try {
@@ -562,6 +572,17 @@ export function ProductsView() {
                                   >
                                     <Archive className="h-4 w-4 text-text-muted" aria-hidden="true" />
                                     Archive
+                                  </button>
+                                )}
+                                {p.status === "archived" && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { close(); unarchive(p); }}
+                                    className={menuItemCls}
+                                  >
+                                    <ArchiveRestore className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                                    Unarchive
                                   </button>
                                 )}
                               </Can>

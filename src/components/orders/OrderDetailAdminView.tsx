@@ -67,10 +67,20 @@ function humanize(value: string): string {
   return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/** Variant options map ({ color: "Black", size: "42" }) → chips ["Black", "42"]. */
-function variantChips(options: Record<string, string> | null | undefined): string[] {
+/**
+ * Variant options map ({ color: "Black", size: "42" }) → labelled chips
+ * [{ label: "Color", value: "Black" }, { label: "Size", value: "42" }] so the
+ * order items read "Color: Black", "Size: 42" rather than bare values. The
+ * attribute key is humanized (`surface_type` → "Surface Type"); the value is shown
+ * as snapshotted. Empty values are dropped.
+ */
+function variantChips(
+  options: Record<string, string> | null | undefined,
+): { label: string; value: string }[] {
   if (!options) return [];
-  return Object.values(options);
+  return Object.entries(options)
+    .filter(([, value]) => value != null && String(value).trim() !== "")
+    .map(([key, value]) => ({ label: humanize(key), value: String(value) }));
 }
 
 /** BDT from a decimal string (defaults to 0). */
@@ -181,7 +191,11 @@ export function OrderDetailAdminView({
   const discount = num(data.amounts?.discount);
   const codSurcharge = num(data.amounts?.cod_surcharge);
   const vat = num(data.amounts?.vat);
-  const canCancel = data.status !== "cancelled" && data.status !== "delivered";
+  // Admin cancel is allowed only PRE-shipped (SRS FR-ORD-041 / validation §11; design
+  // "Only available before the order is shipped") — i.e. not once it's shipped,
+  // out_for_delivery, delivered, already cancelled/refunded, or in the exchange branch.
+  const CANCELLABLE = new Set(["pending_payment", "confirmed", "processing", "packed"]);
+  const canCancel = CANCELLABLE.has(data.status);
 
   async function advance() {
     setError(null);
@@ -429,9 +443,10 @@ export function OrderDetailAdminView({
                   {variantChips(it.variant_options).map((chip, ci) => (
                     <span
                       key={ci}
-                      className="rounded-md bg-surface-subtle px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                      className="inline-flex items-center gap-1 rounded-md bg-surface-subtle px-2 py-0.5 text-[11px] font-medium text-text-secondary"
                     >
-                      {chip}
+                      <span className="text-text-faint">{chip.label}:</span>
+                      <span className="text-text-secondary">{chip.value}</span>
                     </span>
                   ))}
                   {it.sku_code && (
@@ -646,8 +661,12 @@ export function OrderDetailAdminView({
         </Section>
       </Can>
 
-      {/* 9. CANCEL ORDER (pre-shipped) */}
-      <Can permission="orders.order.cancel">
+      {/* 9. CANCEL ORDER (pre-shipped). Gated on `orders.order.update_status` — the
+          catalog has no `orders.order.cancel` code, so gating on it hid the button for
+          everyone incl. Super Admin (whose /admin/me only lists catalog codes); the
+          cancel endpoint still enforces server-side. BE ask: add orders.order.cancel
+          to the permission catalog (brief: ord-cancel-permission-be.md). */}
+      <Can permission="orders.order.update_status">
         {canCancel && (
           <Card className="flex flex-wrap items-center justify-between gap-3 border-error/40 p-4">
             <div>

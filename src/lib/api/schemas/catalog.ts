@@ -184,6 +184,10 @@ export const MANDATORY_ATTRIBUTE_CODES = ["sku", "name", "url_key", "price", "st
 export const productStatusSchema = z.enum(["draft", "published", "archived"]);
 export type ProductStatus = z.infer<typeof productStatusSchema>;
 
+/** Live stock status derived from INV (FR-CAT-042); null when INV is unreachable. */
+export const qtyStatusSchema = z.enum(["in_stock", "low_stock", "out_of_stock"]);
+export type QtyStatus = z.infer<typeof qtyStatusSchema>;
+
 export const productRowSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -193,15 +197,43 @@ export const productRowSchema = z.object({
   family: z.string().nullable().optional(),
   primary_image: z.string().nullable().optional(),
   base_price: z.string().optional(),
+  // Effective sale price (BR-CAT-4); the list struck-renders base + this when sale_active.
+  sale_price: z.string().nullable().optional(),
+  // true only when now ∈ [sale_starts_at, sale_ends_at] (BR-CAT-4).
+  sale_active: z.boolean().optional(),
   status: productStatusSchema.default("draft"),
   primary_category: z.string().nullable().optional(),
   qty: z.number().nullable().optional(),
+  // Derived In/Low/Out label from INV (FR-CAT-042); null/absent when INV is down.
+  qty_status: qtyStatusSchema.nullable().optional(),
 });
 export type ProductRow = z.infer<typeof productRowSchema>;
 export const productListSchema = z.array(productRowSchema);
 /** Paginated envelope for GET /admin/products (rawEnvelope: { data, meta }). */
 export const productPageSchema = paginated(productListSchema);
 export type ProductPage = z.infer<typeof productPageSchema>;
+
+/**
+ * Per-item outcome + summary of PATCH /admin/products/bulk-status (FR-CAT-015/016).
+ * Each item runs the same validation as the single transition, so a batch can
+ * partially succeed — `results[]` carries each id's `ok` + failure `code`/`details`.
+ */
+export const bulkStatusItemSchema = z.object({
+  id: z.string(),
+  ok: z.boolean(),
+  status: z.string().optional(),
+  code: z.string().optional(),
+  details: z.array(z.string()).optional(),
+});
+export type BulkStatusItem = z.infer<typeof bulkStatusItemSchema>;
+
+export const bulkStatusResultSchema = z.object({
+  processed: z.number().default(0),
+  succeeded: z.number().default(0),
+  failed: z.number().default(0),
+  results: z.array(bulkStatusItemSchema).default([]),
+});
+export type BulkStatusResult = z.infer<typeof bulkStatusResultSchema>;
 
 export const productVariantSchema = z.object({
   id: z.string(),

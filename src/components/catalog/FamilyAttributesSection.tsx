@@ -163,7 +163,7 @@ export function FamilyAttributesSection({
   if (embedded) return <div className="flex flex-col gap-4">{body}</div>;
 
   return (
-    <section className="space-y-4 rounded-xl border border-border bg-surface p-5">
+    <section className="space-y-4 rounded-lg border border-border bg-surface p-5">
       <h2 className="text-base font-semibold text-text">Attributes</h2>
       {body}
     </section>
@@ -203,8 +203,8 @@ function StandardField({
                 aria-pressed={on}
                 onClick={() => onChange(on ? selected.filter((v) => v !== o.value) : [...selected, o.value])}
                 className={
-                  "inline-flex select-none items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1 " +
-                  (on ? "border-accent-600 bg-accent-50 text-accent-700" : "border-border-strong text-text-secondary hover:bg-surface-subtle")
+                  "inline-flex h-8 select-none items-center gap-1.5 rounded-full border px-[13px] text-[12.5px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1 " +
+                  (on ? "border-accent-600 bg-accent-600 text-accent-fg" : "border-border-strong bg-surface text-text-secondary hover:bg-surface-subtle")
                 }
               >
                 {on && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
@@ -221,7 +221,7 @@ function StandardField({
     <label className="block">
       {label}
       <select
-        className="h-[38px] w-full max-w-[340px] cursor-pointer rounded-lg border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
+        className="h-[38px] w-full max-w-[340px] cursor-pointer rounded-md border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
         value={typeof value === "string" ? value : ""}
         onChange={(e) => onChange(e.target.value)}
         aria-required={def.required}
@@ -255,14 +255,14 @@ function AttributeField({
     </span>
   );
   const field =
-    "h-[38px] w-full max-w-[340px] rounded-lg border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1";
+    "h-[38px] w-full max-w-[340px] rounded-md border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1";
 
   if (type === "boolean") {
     return (
       <label className="flex items-center gap-2 text-sm text-text-secondary">
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-border-strong text-accent-600 focus-visible:ring-accent-600"
+          className="h-4 w-4 rounded-sm border-border-strong text-accent-600 focus-visible:ring-accent-600"
           checked={value === true}
           onChange={(e) => onChange(e.target.checked)}
         />
@@ -277,7 +277,7 @@ function AttributeField({
       <label className="block">
         {label}
         <textarea
-          className="w-full rounded-lg border border-border-strong bg-surface px-3 py-2.5 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+          className="w-full rounded-md border border-border-strong bg-surface px-3 py-2.5 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
           rows={3}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
@@ -365,10 +365,10 @@ function SelectField({
                     onChange(on ? selected.filter((v) => v !== o.value) : [...selected, o.value])
                   }
                   className={
-                    "inline-flex select-none items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1 " +
+                    "inline-flex h-8 select-none items-center gap-1.5 rounded-full border px-[13px] text-[12.5px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1 " +
                     (on
-                      ? "border-accent-600 bg-accent-50 text-accent-700"
-                      : "border-border-strong text-text-secondary hover:bg-surface-subtle")
+                      ? "border-accent-600 bg-accent-600 text-accent-fg"
+                      : "border-border-strong bg-surface text-text-secondary hover:bg-surface-subtle")
                   }
                 >
                   {on && <Check className="h-3.5 w-3.5" aria-hidden="true" />}

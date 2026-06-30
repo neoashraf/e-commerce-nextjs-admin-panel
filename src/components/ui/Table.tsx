@@ -85,7 +85,10 @@ export function TH({
           type="button"
           onClick={onSort}
           className={cn(
-            "group inline-flex items-center gap-1 rounded-sm hover:text-text-secondary",
+            // Re-apply `text-eyebrow` on the button: a <button> resets font-size to
+            // the UA default, so without this sortable headers render bigger than
+            // plain ones. This pins every sortable header to the same 11px/600 eyebrow.
+            "group inline-flex items-center gap-1 rounded-sm text-eyebrow hover:text-text-secondary",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
             numeric && "flex-row-reverse",
           )}

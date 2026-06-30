@@ -49,6 +49,27 @@ export function useMovements(variantId: string, params: Record<string, string | 
 }
 
 /**
+ * Fetch a single stock row by SKU code via the inventory list (GET /admin/inventory?q=<sku>).
+ * Used by MovementsView to populate the header card on reload, when the stock-list cache is cold
+ * and `useStockRowFromCache` returns undefined. `enabled` should be false while the cache
+ * hit is still possible (i.e. skip this fetch when stockRow is already resolved).
+ */
+export function useStockRowBySkuCode(skuCode: string, enabled: boolean): StockRow | undefined {
+  const { data } = useQuery({
+    queryKey: [...INVENTORY_KEY, "sku-lookup", skuCode] as const,
+    enabled: enabled && !!skuCode,
+    queryFn: (): Promise<StockPage> =>
+      api.get("/admin/inventory", {
+        schema: stockPageSchema,
+        params: { q: skuCode, limit: 10 },
+        rawEnvelope: true,
+      }) as Promise<StockPage>,
+    staleTime: 30_000,
+  });
+  return data?.data.find((r) => r.sku_code === skuCode);
+}
+
+/**
  * Resolve a variant's stock row from the already-fetched `/admin/inventory` cache,
  * so the Movements header can show the SKU code, title, options, reserved, available,
  * and status without a dedicated endpoint (the movements response carries none of these).
@@ -161,6 +182,36 @@ export function useAdjustStock() {
   return useMutation<StockMutationResult, unknown, { variantId: string; quantity_delta: number; reason: string }>({
     mutationFn: ({ variantId, quantity_delta, reason }) =>
       api.post(`/admin/inventory/${variantId}/adjust`, { quantity_delta, reason }, { schema: stockMutationResultSchema }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: INVENTORY_KEY }),
+  });
+}
+
+/** `{ variant_id, on_hand, available, movement_id }` from POST /admin/inventory/{variantId}/set. */
+export const setOnHandResultSchema = z.object({
+  variant_id: z.string(),
+  on_hand: z.number(),
+  available: z.number().optional(),
+  movement_id: z.string().optional(),
+});
+export type SetOnHandResult = z.infer<typeof setOnHandResultSchema>;
+
+/**
+ * Absolute "set on-hand to N" for one variant (FR-INV-015; product-editor variant grid).
+ * Hits the first-class audited POST /admin/inventory/{variantId}/set — NOT the bulk
+ * import endpoint — so INV computes the delta and writes a `correction` movement stamped
+ * with the admin actor + a `product-editor` source tag (BR-INV-10). Rejects a target < 0
+ * with 409 NEGATIVE_ON_HAND. Gated by `inventory.stock.adjust`. Invalidates the inventory
+ * list; the caller also refreshes the product so the matrix reflects the new level.
+ */
+export function useSetOnHand() {
+  const qc = useQueryClient();
+  return useMutation<SetOnHandResult, unknown, { variantId: string; on_hand: number; reason?: string }>({
+    mutationFn: ({ variantId, on_hand, reason }) =>
+      api.post(
+        `/admin/inventory/${variantId}/set`,
+        { on_hand, reason: reason || "inline set · product editor", source: "product-editor" },
+        { schema: setOnHandResultSchema },
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: INVENTORY_KEY }),
   });
 }

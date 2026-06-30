@@ -58,7 +58,7 @@ export function RowActionsMenu({
           </Can>
           <Link
             role="menuitem"
-            href={`/admin/inventory/${row.variant_id}/movements`}
+            href={`/admin/inventory/${row.variant_id}/movements?sku=${encodeURIComponent(row.sku_code)}`}
             className={itemCls}
             onClick={() => close()}
           >

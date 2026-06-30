@@ -22,7 +22,14 @@ import { printInvoice } from "./printInvoice";
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])';
 
-export function OrderDrawer({ orderNo }: { orderNo: string }) {
+export function OrderDrawer({
+  orderNo,
+  onClose,
+}: {
+  orderNo: string;
+  /** Closes the drawer. Provided by the list (drops `?order=`); falls back to history. */
+  onClose?: () => void;
+}) {
   const router = useRouter();
   const { data } = useAdminOrder(orderNo);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -30,7 +37,10 @@ export function OrderDrawer({ orderNo }: { orderNo: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [printing, setPrinting] = useState(false);
 
-  const close = useCallback(() => router.back(), [router]);
+  const close = useCallback(() => {
+    if (onClose) onClose();
+    else router.back();
+  }, [onClose, router]);
 
   const handleKey = useCallback(
     (e: KeyboardEvent) => {

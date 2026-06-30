@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Calendar, ChevronRight, Cpu, ExternalLink, History } from "lucide-react";
 import {
   useMovements,
+  useStockRowBySkuCode,
   useStockRowFromCache,
   type Movement,
 } from "@/lib/api/hooks/useInventory";
@@ -128,7 +129,12 @@ export function MovementsView({ variantId }: { variantId: string }) {
   const to = sp.get("to") ?? "";
 
   const { data, isLoading, isError, refetch } = useMovements(variantId, { page: 1, limit: 100 });
-  const stockRow = useStockRowFromCache(variantId);
+  const stockRowFromCache = useStockRowFromCache(variantId);
+  // `?sku=` is set by both navigation sources (RowActionsMenu + VariantMatrix) so that on
+  // hard reload — when the stock-list React Query cache is cold — we can still fetch the row.
+  const skuFromUrl = sp.get("sku") ?? "";
+  const stockRowFetched = useStockRowBySkuCode(skuFromUrl, !stockRowFromCache);
+  const stockRow = stockRowFromCache ?? stockRowFetched;
 
   function patchQuery(patch: Record<string, string | undefined>) {
     const next = new URLSearchParams(sp.toString());

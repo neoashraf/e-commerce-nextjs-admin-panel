@@ -23,6 +23,7 @@ export type ChartState = "loaded" | "loading" | "empty" | "error";
 
 export function ChartCard({
   title,
+  subtitle,
   action,
   legend,
   state = "loaded",
@@ -34,6 +35,8 @@ export function ChartCard({
   className,
 }: {
   title: React.ReactNode;
+  /** Optional caption under the title (design-system §8.5 — e.g. "Net revenue (৳) and orders · weekly"). */
+  subtitle?: React.ReactNode;
   action?: React.ReactNode;
   legend?: LegendItem[];
   state?: ChartState;
@@ -48,9 +51,20 @@ export function ChartCard({
   const [showData, setShowData] = useState(false);
   const panelId = useId();
 
+  // When a subtitle is given, render the title + caption as a stacked block so
+  // the CardHeader's flex row keeps the title-left / action-right layout.
+  const heading = subtitle ? (
+    <span className="flex flex-col gap-0.5">
+      <span>{title}</span>
+      <span className="text-xs font-normal text-text-muted">{subtitle}</span>
+    </span>
+  ) : (
+    title
+  );
+
   return (
     <Card className={className}>
-      <CardHeader title={title} action={action} />
+      <CardHeader title={heading} action={action} />
       <div className="px-5 pb-5">
         {state === "loading" && (
           <Skeleton className="w-full" style={{ height }} />

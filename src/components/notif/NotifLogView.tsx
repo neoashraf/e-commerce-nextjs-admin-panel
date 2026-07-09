@@ -5,7 +5,7 @@ import { useNotifLog, useResendNotif } from "@/lib/api/hooks/useNotif";
 import { Can } from "@/lib/permissions/Can";
 import { formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/stores/toast";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 import {
   Button,
   Card,
@@ -36,12 +36,13 @@ export function NotifLogView() {
   const channel = sp.get("channel") ?? "";
   const status = sp.get("status") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
+  const { pageSize, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useNotifLog({
     channel: channel || undefined,
     status: status || undefined,
     page,
-    limit: DEFAULT_PAGE_SIZE,
+    limit: pageSize,
   });
   const resend = useResendNotif();
 
@@ -87,7 +88,7 @@ export function NotifLogView() {
 
       <Card className="overflow-hidden p-0">
         {isLoading ? (
-          <SkeletonRows rows={DEFAULT_PAGE_SIZE} cols={6} />
+          <SkeletonRows rows={pageSize} cols={6} />
         ) : isError ? (
           <ErrorState description="Couldn’t load the log." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
@@ -138,9 +139,10 @@ export function NotifLogView() {
             </Table>
             <TablePagination
               page={page}
-              pageSize={DEFAULT_PAGE_SIZE}
+              pageSize={pageSize}
               total={total}
               onPageChange={goPage}
+              onPageSizeChange={setPageSize}
             />
           </>
         )}

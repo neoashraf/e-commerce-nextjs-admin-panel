@@ -85,7 +85,22 @@ export const adminOrderDetailSchema = z.object({
       }),
     )
     .default([]),
+  /** Legacy field — kept for backward compat; use `notes` for the attributed thread. */
   internal_notes: z.array(z.object({ body: z.string(), created_at: z.string().optional() })).default([]),
+  /** Customer's checkout note (FR-ORD-072a). Null when not provided. */
+  customer_note: z.string().nullable().optional(),
+  /** Attributed notes thread: customer note + all admin notes with author info (FR-ORD-072b). */
+  notes: z
+    .array(
+      z.object({
+        id: z.string(),
+        author_type: z.enum(["admin", "customer"]),
+        author_name: z.string(),
+        body: z.string(),
+        created_at: z.string(),
+      }),
+    )
+    .default([]),
 });
 export type AdminOrderDetail = z.infer<typeof adminOrderDetailSchema>;
 
@@ -120,5 +135,13 @@ export function useCancelOrderAdmin(orderNo: string) {
   return useMutation({
     mutationFn: (reason: string) => api.post(`/admin/orders/${orderNo}/cancel`, { reason }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-order", orderNo] }); qc.invalidateQueries({ queryKey: ["admin-orders"] }); },
+  });
+}
+/** Add an internal note (FR-ORD-072) — POST /admin/orders/{orderNo}/notes → { id, created_at }. */
+export function useAddOrderNote(orderNo: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) => api.post(`/admin/orders/${orderNo}/notes`, { body }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-order", orderNo] }); },
   });
 }

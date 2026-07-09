@@ -5,6 +5,7 @@ import type { StockRow } from "@/lib/api/schemas/inventory";
 import { Card, StatusPill } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { RowActionsMenu } from "./RowActionsMenu";
+import { StockThumb } from "./StockThumb";
 import { optionsOrFallback, STATUS_LABEL } from "./shared";
 
 /** Mobile/tablet stock card (≥360px, < lg) — design §4. Prominent Available +
@@ -23,22 +24,25 @@ export function StockCard({
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          {row.product_id ? (
-            <Link
-              href={`/admin/products/${row.product_id}`}
-              title={row.product_title ?? row.sku_code}
-              className="block truncate font-medium text-text hover:text-accent-700 hover:underline"
-            >
-              {row.product_title ?? row.sku_code}
-            </Link>
-          ) : (
-            <span title={row.product_title ?? row.sku_code} className="block truncate font-medium text-text">
-              {row.product_title ?? row.sku_code}
-            </span>
-          )}
-          <span className="block text-xs text-text-faint">{row.sku_code}</span>
-          <span className="mt-0.5 block text-xs text-text-muted">{optionsOrFallback(row)}</span>
+        <div className="flex min-w-0 items-center gap-3">
+          <StockThumb row={row} />
+          <div className="min-w-0">
+            {row.product_id ? (
+              <Link
+                href={`/admin/products/${row.product_id}`}
+                title={row.product_title ?? row.sku_code}
+                className="block truncate font-medium text-text hover:text-accent-700 hover:underline"
+              >
+                {row.product_title ?? row.sku_code}
+              </Link>
+            ) : (
+              <span title={row.product_title ?? row.sku_code} className="block truncate font-medium text-text">
+                {row.product_title ?? row.sku_code}
+              </span>
+            )}
+            <span className="block text-xs tabular-nums text-text-faint">{row.sku_code}</span>
+            <span className="mt-0.5 block text-xs text-text-muted">{optionsOrFallback(row)}</span>
+          </div>
         </div>
         <RowActionsMenu row={row} onSetAdjust={onSetAdjust} onEditThreshold={onEditThreshold} />
       </div>

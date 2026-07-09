@@ -10,7 +10,7 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { Can } from "@/lib/permissions/Can";
 import { formatDateTime } from "@/lib/format";
 import { ApiError } from "@/lib/api/errors";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Card,
@@ -37,8 +37,6 @@ import {
  * (suspend/reactivate/delete/resend-invite) behind confirm dialogs and `<Can>`;
  * own-row destructive actions hidden. Presentation + pagination only.
  */
-const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-
 type Pending = { kind: "suspend" | "reactivate" | "delete"; user: AdminUserRow } | null;
 
 export function UsersView() {
@@ -50,14 +48,14 @@ export function UsersView() {
   const status = sp.get("status") ?? "";
   const q = sp.get("q") ?? "";
   const includeDeleted = sp.get("include_deleted") === "1";
-  const page = Math.max(1, Number(sp.get("page") ?? "1") || 1);
+  const { page, pageSize, setPage, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useAdminUsers({
     status: status || undefined,
     q: q || undefined,
     include_deleted: includeDeleted || undefined,
     page,
-    limit: PAGE_SIZE,
+    limit: pageSize,
   });
   const actions = useAdminUserActions();
   const [pending, setPending] = useState<Pending>(null);
@@ -186,7 +184,7 @@ export function UsersView() {
               ))}
             </ul>
 
-            <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(p) => setParam("page", String(p))} />
+            <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         )}
       </Card>

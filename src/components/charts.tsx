@@ -10,6 +10,7 @@ import {
   Line,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -129,6 +130,21 @@ export interface TrendPoint {
 
 /** Revenue area + orders line over time (dual axis). Gradient area fill 14%→0%. */
 export function TrendChart({ data }: { data: TrendPoint[] }) {
+  // Net revenue = paid − refunds, so a bucket CAN be negative (refunds outrun
+  // sales). Recharts' auto-domain then spans only the data, e.g. `[-10000, -200]`,
+  // which fills the whole panel below the top edge and reads as "broken". Force
+  // each axis to always include 0 so positive and negative buckets share one
+  // honest baseline; the gradient area is anchored to that 0 line (see baseValue
+  // below) and a ReferenceLine marks it. `|| 1` guards a degenerate all-zero
+  // series so the axis still has a non-empty range.
+  const revenues = data.map((d) => d.revenue);
+  const orders = data.map((d) => d.orders);
+  const revMin = Math.min(0, ...revenues);
+  const revMax = Math.max(0, ...revenues);
+  const ordMin = Math.min(0, ...orders);
+  const ordMax = Math.max(0, ...orders);
+  const hasNegativeRevenue = revMin < 0;
+
   return (
     <ChartFrame>
       <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -142,6 +158,8 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
         <XAxis dataKey="bucket" tick={AXIS_TICK} stroke={GRID_COLOR} tickLine={false} />
         <YAxis
           yAxisId="rev"
+          domain={[revMin, revMax || 1]}
+          allowDataOverflow={false}
           tick={AXIS_TICK}
           stroke={GRID_COLOR}
           tickLine={false}
@@ -151,11 +169,19 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
         <YAxis
           yAxisId="ord"
           orientation="right"
+          domain={[ordMin, ordMax || 1]}
+          allowDecimals={false}
+          allowDataOverflow={false}
           tick={AXIS_TICK}
           stroke={GRID_COLOR}
           tickLine={false}
           axisLine={false}
         />
+        {/* Zero baseline — only meaningful (and only drawn) when a bucket dips
+            negative, so positive-only periods stay clean. */}
+        {hasNegativeRevenue && (
+          <ReferenceLine yAxisId="rev" y={0} stroke="#94A3B8" strokeDasharray="3 3" />
+        )}
         <Tooltip content={<ChartTooltip currencyKeys={["revenue", "Revenue"]} />} />
         <Area
           yAxisId="rev"
@@ -164,6 +190,9 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
           name="Revenue"
           stroke={CHART_COLORS[0]}
           fill="url(#trendRevFill)"
+          // Fill down to the 0 baseline, not to the auto domain min, so the
+          // gradient always reads as area-under-the-curve.
+          baseValue={0}
           strokeWidth={2}
           activeDot={{ r: 4, fill: CHART_COLORS[0], stroke: "#fff", strokeWidth: 2 }}
           dot={false}

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Menu, PanelLeft, Search } from "lucide-react";
+import { ChevronDown, Menu, PanelLeft } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useAdminLogout } from "@/lib/api/hooks/useAuth";
+import { GlobalSearch } from "@/components/shell/GlobalSearch";
 import { NotificationBell } from "@/components/shell/NotificationBell";
 
 /**
@@ -88,22 +89,8 @@ export function Topbar({
         <PanelLeft className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>
 
-      {/* Global search (visual affordance; backend search is out of scope here). */}
-      <div className="relative hidden max-w-md flex-1 sm:block">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint"
-          aria-hidden="true"
-        />
-        <input
-          type="search"
-          placeholder="Search orders, products, customers…"
-          aria-label="Search"
-          className="h-9 w-full rounded-md border border-border-strong bg-surface pl-9 pr-16 text-sm text-text placeholder:text-text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
-        />
-        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-surface-subtle px-1.5 py-0.5 text-[11px] font-medium text-text-muted">
-          ⌘K
-        </kbd>
-      </div>
+      {/* Global search — routes the query to the matching list (Orders/Products/Customers). */}
+      <GlobalSearch />
 
       {/* Keep flex-1 + justify-end at every breakpoint so this block absorbs the
           row's free space and pins the bell + account menu to the right corner.

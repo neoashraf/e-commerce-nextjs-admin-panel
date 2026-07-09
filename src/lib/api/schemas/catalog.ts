@@ -63,6 +63,22 @@ export const createCategoryResultSchema = z.object({
   is_published: z.boolean().optional(),
 });
 
+/** The three image slots a category carries (one image per slot, no gallery). */
+export const CATEGORY_IMAGE_SLOTS = ["thumbnail", "logo", "banner"] as const;
+export type CategoryImageSlot = (typeof CATEGORY_IMAGE_SLOTS)[number];
+
+/**
+ * `{ url, slot }` returned by POST /admin/categories/{id}/images (multipart:
+ * file + slot). `slot` selects the column written — thumbnail→image_url,
+ * logo→logo_url, banner→banner_url. The running BE may not serve this endpoint
+ * yet (brief: cat-category-editor-be.md); the editor falls back to URL-paste,
+ * which writes the same columns via the normal create/update body.
+ */
+export const categoryImageUploadResultSchema = z.object({
+  url: z.string(),
+  slot: z.enum(CATEGORY_IMAGE_SLOTS).optional(),
+});
+
 export const ATTRIBUTE_TYPES = [
   "text", "textarea", "select", "multiselect", "boolean", "number",
   "decimal", "date", "datetime", "price", "image", "file", "url",
@@ -180,6 +196,8 @@ export const productRowSchema = z.object({
   status: productStatusSchema.default("draft"),
   primary_category: z.string().nullable().optional(),
   qty: z.number().nullable().optional(),
+  // Live stock status from INV (joined on the admin list) — shown next to qty, like the inventory page.
+  qty_status: z.enum(["in_stock", "low_stock", "out_of_stock"]).nullable().optional(),
 });
 export type ProductRow = z.infer<typeof productRowSchema>;
 export const productListSchema = z.array(productRowSchema);
@@ -196,6 +214,9 @@ export const productVariantSchema = z.object({
   is_enabled: z.boolean().default(true),
   // Live INV stock for the editor matrix (admin detail joins it per variant).
   on_hand: z.number().default(0),
+  // Reserved units (held by open orders) — the matrix shows Avail = on_hand − reserved.
+  // BE may not join it yet → default 0 so the readout degrades to "Resvd 0".
+  reserved: z.number().default(0),
   low_stock_threshold: z.number().default(0),
 });
 export type ProductVariant = z.infer<typeof productVariantSchema>;
@@ -208,8 +229,67 @@ export const adminProductImageSchema = z.object({
   alt_text: z.string(),
   is_primary: z.boolean().default(false),
   display_order: z.number().default(0),
+  // The `color` attribute option this image represents (FR-CAT-032). null/absent = untagged.
+  color_option_id: z.string().nullable().optional(),
 });
 export type AdminProductImage = z.infer<typeof adminProductImageSchema>;
+
+/**
+ * One configurable-attribute group on the admin product detail
+ * (GET /admin/products/{id} → configurable_attributes[]). The editor uses the
+ * `color` group's options to populate the per-image color-tag select (and its
+ * swatch). BE may not return it yet → the editor degrades (hides the select).
+ */
+export const configurableAttributeSchema = z.object({
+  code: z.string(),
+  label: z.string().optional(),
+  options: z
+    .array(
+      z.object({
+        id: z.string(),
+        value: z.string(),
+        swatch_type: z.string().nullable().optional(),
+        swatch_value: z.string().nullable().optional(),
+      }),
+    )
+    .default([]),
+});
+export type ConfigurableAttribute = z.infer<typeof configurableAttributeSchema>;
+
+/** One product video (GET /admin/products/{id} → videos[], ordered after images). */
+export const adminProductVideoSchema = z.object({
+  id: z.string(),
+  source: z.enum(["url", "upload"]).default("url"),
+  url: z.string(),
+  display_order: z.number().default(0),
+});
+export type AdminProductVideo = z.infer<typeof adminProductVideoSchema>;
+
+/** `{ id }` returned by POST /admin/products/{id}/videos. */
+export const addVideoResultSchema = z.object({
+  id: z.string(),
+  // Backend now returns the stored video link (Cloudinary URL for an upload) + source/order.
+  source: z.string().optional(),
+  url: z.string().optional(),
+  display_order: z.number().optional(),
+});
+
+/** One linked product item (GET /admin/products/{id} → links.{related,up_sell,cross_sell}[]). */
+export const productLinkItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  sku: z.string().nullable().optional(),
+  primary_image: z.string().nullable().optional(),
+});
+export type ProductLinkItem = z.infer<typeof productLinkItemSchema>;
+
+/** Typed product links on the detail. BE may not return it yet → all default []. */
+export const productLinksSchema = z.object({
+  related: z.array(productLinkItemSchema).default([]),
+  up_sell: z.array(productLinkItemSchema).default([]),
+  cross_sell: z.array(productLinkItemSchema).default([]),
+});
+export type ProductLinks = z.infer<typeof productLinksSchema>;
 
 export const productDetailSchema = z.object({
   id: z.string(),
@@ -230,9 +310,23 @@ export const productDetailSchema = z.object({
   is_new: z.boolean().default(false),
   status: productStatusSchema.default("draft"),
   primary_category_id: z.string().nullable().optional(),
+  // Additional browsing categories (BR-CAT-2). Contract accepts `category_ids` on
+  // create/update; the BE may not return it yet → default [] so the UI degrades.
+  category_ids: z.array(z.string()).default([]),
   primary_image_id: z.string().nullable().optional(),
   images: z.array(adminProductImageSchema).default([]),
+  // Configurable-attribute groups (e.g. `color`) — source for the per-image
+  // color-tag select. BE may not return it yet → default [] so the UI degrades.
+  configurable_attributes: z.array(configurableAttributeSchema).default([]),
+  // Product videos (ordered after images). BE may not return it yet → default [].
+  videos: z.array(adminProductVideoSchema).default([]),
+  // Typed product links. BE may not return it yet → groups default to [].
+  links: productLinksSchema.default({ related: [], up_sell: [], cross_sell: [] }),
+  // Shipping weight (kg). Contract create body carries `weight`; nullable here so
+  // it round-trips once the BE returns it on the detail.
+  weight: z.string().nullable().optional(),
   meta_title: z.string().nullable().optional(),
+  meta_keywords: z.string().nullable().optional(),
   meta_description: z.string().nullable().optional(),
   // EAV attribute values keyed by attribute code (text/number = string, boolean,
   // multiselect = string[]). The editor's family-driven inputs read/write this.

@@ -40,16 +40,25 @@ function TabLink({
       )}
       {item.label}
       {item.count !== undefined && (
-        <span className="ml-1.5 tabular-nums text-text-faint">{item.count}</span>
+        // Count badge: an accent-50/700 pill when active, a neutral subtle pill
+        // otherwise (design ORD §C — active tab reads in the brand accent).
+        <span
+          className={cn(
+            "ml-1 inline-flex h-[18px] min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
+            active ? "bg-accent-50 text-accent-700" : "bg-surface-subtle text-text-muted",
+          )}
+        >
+          {item.count}
+        </span>
       )}
     </>
   );
   const className = cn(
-    "relative -mb-px inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors",
+    "relative -mb-px inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1 text-sm font-semibold transition-colors",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
     active
-      ? "border-accent-600 text-text"
-      : "border-transparent text-text-muted hover:text-text-secondary",
+      ? "border-accent-600 text-accent-700"
+      : "border-transparent text-text-muted hover:text-text",
   );
 
   if (item.href) {

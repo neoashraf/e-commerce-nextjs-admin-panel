@@ -9,7 +9,7 @@ import {
 } from "@/lib/api/schemas/exchanges";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { formatDate } from "@/lib/format";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { usePageParams } from "@/lib/usePageParams";
 import {
   Card,
   EmptyState,
@@ -54,12 +54,13 @@ export function ExchangeQueueView() {
   const status = sp.get("status") ?? "";
   const reason = sp.get("reason") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
+  const { pageSize, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useExchanges({
     status: status || undefined,
     reason: reason || undefined,
     page,
-    limit: DEFAULT_PAGE_SIZE,
+    limit: pageSize,
   });
 
   const rows = data?.data ?? [];
@@ -122,7 +123,7 @@ export function ExchangeQueueView() {
 
       <Card className="overflow-hidden p-0">
         {isLoading ? (
-          <SkeletonRows rows={DEFAULT_PAGE_SIZE} cols={6} />
+          <SkeletonRows rows={pageSize} cols={6} />
         ) : isError ? (
           <ErrorState description="Couldn’t load exchanges." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
@@ -197,9 +198,10 @@ export function ExchangeQueueView() {
             </Table>
             <TablePagination
               page={page}
-              pageSize={DEFAULT_PAGE_SIZE}
+              pageSize={pageSize}
               total={total}
               onPageChange={goPage}
+              onPageSizeChange={setPageSize}
             />
           </>
         )}

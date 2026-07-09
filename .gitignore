@@ -32,3 +32,11 @@ next-env.d.ts
 # editor / OS
 .idea/
 Thumbs.db
+
+# playwright e2e
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/e2e/__shots__/
+*.log

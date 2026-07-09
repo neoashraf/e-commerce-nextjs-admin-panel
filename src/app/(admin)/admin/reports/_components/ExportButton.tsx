@@ -22,27 +22,24 @@ export function ExportButton({ meta }: { meta: ReportMeta }) {
   const submit = (format: ExportFormat) =>
     start({ report_key: meta.key, params: apiParams, format });
 
-  // Raw-data CSV export lives in each module's own page (Orders, Stock, Customers, …), so the Reports
-  // viewer offers CSV only for Sales (which has no dedicated module). PDF (formatted report) stays where
-  // available. If a report has neither, render no export action.
-  const showCsv = meta.key === "sales";
-  if (!showCsv && !meta.pdf) return null;
-
+  // Every report tab offers an "Export CSV" action per the RPT designs (the
+  // accent header button on each report — Sales/Orders/Products/Inventory/
+  // Customers/Payments/…). The backend serialises CSV for all report families
+  // (report-content.service handles every ReportKey). PDF (formatted report)
+  // is offered only where the report has a printable layout (meta.pdf).
   return (
     <Can permission={REPORTS_EXPORT_PERMISSION}>
       <div className="flex flex-col items-start gap-1 sm:items-end">
         <div className="flex flex-wrap gap-2">
-          {showCsv && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => submit("csv")}
-              disabled={busy}
-              leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
-            >
-              Export CSV
-            </Button>
-          )}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => submit("csv")}
+            disabled={busy}
+            leadingIcon={<Download className="h-4 w-4" aria-hidden="true" />}
+          >
+            Export CSV
+          </Button>
           {meta.pdf && (
             <Button
               variant="secondary"

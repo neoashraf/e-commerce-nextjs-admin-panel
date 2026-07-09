@@ -14,7 +14,8 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { RowActionsMenu } from "./RowActionsMenu";
-import { optionsOrFallback, STATUS_LABEL, type SortDir, type SortKey } from "./shared";
+import { StockThumb } from "./StockThumb";
+import { hasOptionLabels, optionsOrFallback, STATUS_LABEL, type SortDir, type SortKey } from "./shared";
 
 /** Desktop stock data table (≥1024px) on the AD0 `Table` (design §8.6). */
 export function StockTable({
@@ -62,23 +63,30 @@ export function StockTable({
             const negative = r.available < 0;
             return (
               <TR key={r.variant_id}>
-                <TD className="max-w-[16rem]">
-                  {r.product_id ? (
-                    <Link
-                      href={`/admin/products/${r.product_id}`}
-                      title={r.product_title ?? r.sku_code}
-                      className="block truncate font-medium text-text hover:text-accent-700 hover:underline"
-                    >
-                      {r.product_title ?? r.sku_code}
-                    </Link>
-                  ) : (
-                    <span title={r.product_title ?? r.sku_code} className="block truncate font-medium text-text">
-                      {r.product_title ?? r.sku_code}
-                    </span>
-                  )}
-                  <span className="block text-xs text-text-faint">{r.sku_code}</span>
+                <TD className="max-w-[18rem]">
+                  <div className="flex items-center gap-3">
+                    <StockThumb row={r} />
+                    <div className="min-w-0">
+                      {r.product_id ? (
+                        <Link
+                          href={`/admin/products/${r.product_id}`}
+                          title={r.product_title ?? r.sku_code}
+                          className="block truncate font-medium text-text hover:text-accent-700 hover:underline"
+                        >
+                          {r.product_title ?? r.sku_code}
+                        </Link>
+                      ) : (
+                        <span title={r.product_title ?? r.sku_code} className="block truncate font-medium text-text">
+                          {r.product_title ?? r.sku_code}
+                        </span>
+                      )}
+                      <span className="block text-xs tabular-nums text-text-faint">{r.sku_code}</span>
+                    </div>
+                  </div>
                 </TD>
-                <TD className="text-xs text-text-muted">{optionsOrFallback(r)}</TD>
+                <TD className={cn("text-xs", hasOptionLabels(r) ? "text-text-muted" : "text-text-faint")}>
+                  {optionsOrFallback(r)}
+                </TD>
                 <TD numeric>{r.on_hand}</TD>
                 <TD numeric className="text-text-faint">{r.reserved}</TD>
                 <TD numeric>

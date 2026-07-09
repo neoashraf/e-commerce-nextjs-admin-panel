@@ -6,6 +6,8 @@ import {
   categoryTreeSchema,
   categoryDetailSchema,
   createCategoryResultSchema,
+  categoryImageUploadResultSchema,
+  type CategoryImageSlot,
   attributeListSchema,
   attributePageSchema,
   type AttributePage,
@@ -71,12 +73,16 @@ export function useFilterableAttributes() {
 
 type CategoryBody = Partial<{
   name: string;
+  slug: string;
   parent_id: string | null;
   description: string;
   display_mode: string;
   show_in_menu: boolean;
   is_published: boolean;
   position: number;
+  image_url: string;
+  logo_url: string;
+  banner_url: string;
   filterable_attribute_codes: string[];
   meta_title: string;
   meta_keywords: string;
@@ -119,6 +125,92 @@ export function useDeleteCategory() {
     mutationFn: (id: string) => api.delete<void>(`/admin/categories/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-categories"] }),
   });
+}
+
+/**
+ * Upload one category image into a slot (thumbnail | logo | banner) →
+ * POST /admin/categories/{id}/images (multipart: file + slot). The BE writes the
+ * matching column (image_url / logo_url / banner_url) and returns `{ url, slot }`.
+ * The running BE may not serve this endpoint yet (brief: cat-category-editor-be.md);
+ * the editor catches the failure and keeps the URL-paste fallback working.
+ */
+export function useUploadCategoryImage(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { file: File; slot: CategoryImageSlot }) => {
+      const form = new FormData();
+      form.append("file", input.file);
+      form.append("slot", input.slot);
+      return api.postForm(`/admin/categories/${id}/images`, form, {
+        schema: categoryImageUploadResultSchema,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-categories"] });
+      qc.invalidateQueries({ queryKey: catalogKeys.category(id) });
+    },
+  });
+}
+
+/**
+ * Reorder one sibling group. The BE persists a RAW `position` per category and
+ * does NOT renumber the rest of the group (update-category.use-case.ts), so
+ * sending only the moved node's position collides with an existing one and the
+ * tree (ordered by `position ASC`) doesn't actually move. We therefore renumber
+ * the WHOLE group to a clean 1..N sequence and PATCH every sibling whose
+ * position changed. Optimistically reorders the cached tree so the row moves
+ * instantly; on any failure the cache is rolled back and the tree refetched.
+ *
+ * `orderedIds` is the parent's children in their desired new order.
+ * `parentId` is null for top-level roots.
+ */
+export function useReorderCategory(includeDeleted = false) {
+  const qc = useQueryClient();
+  const queryKey = catalogKeys.categoryTree(includeDeleted);
+
+  return useMutation({
+    // Renumber the whole group to a clean 1..N so positions never collide. PATCH
+    // every sibling (a group is small); the BE writes the raw position each gets.
+    mutationFn: async ({ orderedIds }: { parentId: string | null; orderedIds: string[] }) => {
+      await Promise.all(orderedIds.map((id, idx) => api.patch(`/admin/categories/${id}`, { position: idx + 1 })));
+    },
+    onMutate: async ({ parentId, orderedIds }) => {
+      await qc.cancelQueries({ queryKey });
+      const previous = qc.getQueryData<CategoryNode[]>(queryKey);
+      if (previous) {
+        qc.setQueryData<CategoryNode[]>(queryKey, reorderTreeGroup(previous, parentId, orderedIds));
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-categories"] }),
+  });
+}
+
+/**
+ * Return a copy of `tree` with the children of `parentId` reordered to match
+ * `orderedIds` and their `position` renumbered 1..N (mirrors the BE write).
+ */
+function reorderTreeGroup(tree: CategoryNode[], parentId: string | null, orderedIds: string[]): CategoryNode[] {
+  const apply = (siblings: CategoryNode[]): CategoryNode[] => {
+    const byId = new Map(siblings.map((s) => [s.id, s]));
+    // Keep any sibling missing from orderedIds (e.g. a filtered-out deleted node) in place.
+    const ordered = orderedIds.map((id) => byId.get(id)).filter((s): s is CategoryNode => !!s);
+    const extras = siblings.filter((s) => !orderedIds.includes(s.id));
+    return [...ordered, ...extras].map((s, idx) => ({ ...s, position: idx + 1 }));
+  };
+
+  if (parentId === null) return apply(tree);
+
+  const recurse = (nodes: CategoryNode[]): CategoryNode[] =>
+    nodes.map((n) =>
+      n.id === parentId
+        ? { ...n, children: apply(n.children) }
+        : { ...n, children: recurse(n.children) },
+    );
+  return recurse(tree);
 }
 
 // ---- Attributes (catalog-attributes-fe) ----
@@ -280,6 +372,7 @@ import {
   createProductResultSchema as _cprs,
   generateVariantsResultSchema as _gvrs,
   uploadImageResultSchema as _uirs,
+  addVideoResultSchema as _avrs,
   editorFamilyDetailSchema as _efds,
   type ProductDetail as _PD,
   type EditorFamilyDetail as _EFD,
@@ -348,11 +441,17 @@ export function useEditorFamily(familyId: string) {
 export function useUploadProductImage(productId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { file: File; alt_text: string; is_primary?: boolean }) => {
+    mutationFn: (input: {
+      file: File;
+      alt_text: string;
+      is_primary?: boolean;
+      color_option_id?: string | null;
+    }) => {
       const form = new FormData();
       form.append("file", input.file);
       form.append("alt_text", input.alt_text);
       if (input.is_primary) form.append("is_primary", "true");
+      if (input.color_option_id) form.append("color_option_id", input.color_option_id);
       return api.postForm(`/admin/products/${productId}/images`, form, { schema: _uirs });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
@@ -372,15 +471,49 @@ export function useSetProductImagePrimary(productId: string) {
   });
 }
 
-/** Edit an existing image's alt text (PATCH .../images/{imageId}). Invalidates the product to refresh. */
-export function useUpdateProductImageAlt(productId: string) {
+/**
+ * Edit an existing image's alt text and/or color tag (PATCH .../images/{imageId}).
+ * Sends any subset; `color_option_id: null` clears the tag. Invalidates the product to refresh.
+ */
+export function useUpdateProductImage(productId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { imageId: string; alt_text: string }) =>
-      api.patch(`/admin/products/${productId}/images/${input.imageId}`, {
-        alt_text: input.alt_text,
-      }),
+    mutationFn: (input: { imageId: string; alt_text?: string; color_option_id?: string | null }) => {
+      const body: Record<string, unknown> = {};
+      if (input.alt_text !== undefined) body.alt_text = input.alt_text;
+      if (input.color_option_id !== undefined) body.color_option_id = input.color_option_id;
+      return api.patch(`/admin/products/${productId}/images/${input.imageId}`, body);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}
+
+/**
+ * Persist the gallery order (PATCH .../images/reorder) with the full set of image
+ * ids in the desired order. Optimistically rewrites the cached product so the tiles
+ * stay put while the request is in flight; rolls back on error. The storefront PDP
+ * renders images in this display_order.
+ */
+export function useReorderProductImages(productId: string) {
+  const qc = useQueryClient();
+  const key = ["admin-product", productId];
+  return useMutation({
+    mutationFn: (orderedIds: string[]) =>
+      api.patch(`/admin/products/${productId}/images/reorder`, { ordered_ids: orderedIds }),
+    onMutate: async (orderedIds) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<_PD>(key);
+      if (previous) {
+        const byId = new Map(previous.images.map((i) => [i.id, i]));
+        const images = orderedIds
+          .map((id, idx) => { const im = byId.get(id); return im ? { ...im, display_order: idx } : null; })
+          .filter((i): i is _PD["images"][number] => i !== null);
+        qc.setQueryData<_PD>(key, { ...previous, images });
+      }
+      return { previous };
+    },
+    onError: (_e, _v, ctx) => { if (ctx?.previous) qc.setQueryData(key, ctx.previous); },
+    onSettled: () => qc.invalidateQueries({ queryKey: key }),
   });
 }
 
@@ -394,6 +527,40 @@ export function useDeleteProductImage(productId: string) {
   return useMutation({
     mutationFn: (imageId: string) =>
       api.delete<void>(`/admin/products/${productId}/images/${imageId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}
+
+// ---- Product links (FR-CAT-019; PUT /admin/products/{id}/links) ----
+
+/** Save the full set of typed product links (related / up_sell / cross_sell). */
+export function useSetProductLinks(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { related: string[]; up_sell: string[]; cross_sell: string[] }) =>
+      api.put(`/admin/products/${productId}/links`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}
+
+// ---- Product videos (FR-CAT-034; POST/DELETE /admin/products/{id}/videos) ----
+
+/** Add a product video by URL (or upload). Invalidates the product so videos[] refresh. */
+export function useAddProductVideo(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { source: "url" | "upload"; url: string; display_order?: number }) =>
+      api.post(`/admin/products/${productId}/videos`, input, { schema: _avrs }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
+  });
+}
+
+/** Delete a product video. Invalidates the product so videos[] refresh. */
+export function useDeleteProductVideo(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (videoId: string) =>
+      api.delete<void>(`/admin/products/${productId}/videos/${videoId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }),
   });
 }

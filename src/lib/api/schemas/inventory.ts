@@ -18,6 +18,12 @@ export const stockRowSchema = z.object({
   sku_code: z.string(),
   product_title: z.string().nullable().optional(),
   product_id: z.string().nullable().optional(),
+  /**
+   * Listing-rendition thumbnail for the Product/SKU cell (design Stock §C).
+   * Not yet in the backend InventoryRowDto — degrades to a placeholder icon
+   * until BE adds it; wired the moment it appears. (BE ask: product_image.)
+   */
+  product_image: z.string().nullable().optional(),
   options: z.record(z.string()).nullable().optional(),
   on_hand: z.number().default(0),
   reserved: z.number().default(0),
@@ -54,6 +60,13 @@ export type StockMutationResult = z.infer<typeof stockMutationResultSchema>;
 export interface StockListParams {
   q?: string;
   status?: StockStatus;
+  /**
+   * Product-family filter (design Stock §B). Forwarded to the API as `category`;
+   * harmless if the backend ignores it until the filter ships (brief:
+   * safwan-update-api/inv-category-filter-be.md), at which point the FE family
+   * fallback becomes a no-op.
+   */
+  category?: string;
   page?: number;
   limit?: number;
 }

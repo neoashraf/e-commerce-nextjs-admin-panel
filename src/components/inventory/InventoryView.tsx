@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PackageX, Upload, WifiOff } from "lucide-react";
-import { useInventory } from "@/lib/api/hooks/useInventory";
+import { useInventory, useStockStatusCounts } from "@/lib/api/hooks/useInventory";
 import type { StockRow, StockStatus } from "@/lib/api/schemas/inventory";
 import { Can } from "@/lib/permissions/Can";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
@@ -16,6 +16,8 @@ import { StockCard } from "@/app/(admin)/admin/inventory/_components/StockCard";
 import { SetAdjustModal } from "@/app/(admin)/admin/inventory/_components/SetAdjustModal";
 import { ThresholdModal } from "@/app/(admin)/admin/inventory/_components/ThresholdModal";
 import {
+  CATEGORY_OPTIONS,
+  deriveFamily,
   STOCK_MUTATE_PERMISSION,
   sortRows,
   type SortDir,
@@ -58,6 +60,10 @@ export function InventoryView() {
 
   const q = sp.get("q") ?? "";
   const status = sp.get("status") ?? "";
+  // Product-family filter (design Stock §B). Forwarded to the API as `category`;
+  // until the backend accepts it (brief: safwan-update-api/inv-category-filter-be.md)
+  // it falls back to filtering the loaded page client-side via `deriveFamily`.
+  const category = sp.get("category") ?? "";
   const limit = Number(sp.get("limit")) || DEFAULT_PAGE_SIZE;
   const page = Number(sp.get("page")) || 1;
 
@@ -69,16 +75,40 @@ export function InventoryView() {
   const { data, isLoading, isError, isFetching, refetch } = useInventory({
     q: q || undefined,
     status: (status || undefined) as StockStatus | undefined,
+    category: category || undefined,
     page,
     limit,
   });
+  const { low: lowCount, out: outCount } = useStockStatusCounts();
 
-  const hasFilters = q !== "" || status !== "";
+  const hasFilters = q !== "" || status !== "" || category !== "";
   const total = data?.meta.total ?? 0;
+  // Header summary (design: "{total} SKUs total · {low} low · {out} out"). When a status
+  // filter is active the design instead reads "Filtered to '<status>'".
+  const statusLabel: Record<string, string> = {
+    in_stock: "In stock",
+    low_stock: "Low",
+    out_of_stock: "Out",
+  };
+  const headerSummary = status
+    ? `Filtered to ‘${statusLabel[status] ?? status}’`
+    : data
+      ? [
+          `${total} SKU${total === 1 ? "" : "s"} total`,
+          lowCount !== undefined ? `${lowCount} low` : null,
+          outCount !== undefined ? `${outCount} out` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : undefined;
   const rows = useMemo(() => {
-    const base = data?.data ?? [];
+    let base = data?.data ?? [];
+    // Client-side family fallback: until the backend honors `category`, narrow the
+    // loaded page by the derived family. A no-op once the server filters (rows
+    // already match); the dropdown stays correct without an empty list meanwhile.
+    if (category) base = base.filter((r) => deriveFamily(r) === category);
     return sort ? sortRows(base, sort, dir) : base;
-  }, [data, sort, dir]);
+  }, [data, sort, dir, category]);
   const resultLabel = data ? `${total} SKU${total === 1 ? "" : "s"}` : undefined;
 
   function patchQuery(patch: Record<string, string | undefined>) {
@@ -105,8 +135,13 @@ export function InventoryView() {
   return (
     <div className="space-y-5">
       {/* Header — read-only (records are auto-created by CAT; no Create CTA). */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">Stock</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[22px] font-bold leading-7 tracking-tight text-text">Stock</h1>
+          {headerSummary && (
+            <p className="mt-0.5 text-[13px] tabular-nums text-text-muted">{headerSummary}</p>
+          )}
+        </div>
         <div className="flex items-start gap-2">
           <StockExportButton status={status} q={q} />
           <Can permission={STOCK_MUTATE_PERMISSION}>
@@ -128,7 +163,13 @@ export function InventoryView() {
         </p>
       )}
 
-      <StockFilters q={q} status={status} limit={limit} resultLabel={resultLabel} onChange={patchQuery} />
+      <StockFilters
+        q={q}
+        status={status}
+        category={category}
+        resultLabel={resultLabel}
+        onChange={patchQuery}
+      />
 
       {isLoading ? (
         <Card className="p-0">
@@ -138,13 +179,13 @@ export function InventoryView() {
         <Card className="p-0">
           <ErrorState description="Couldn't load stock." onRetry={() => refetch()} />
         </Card>
-      ) : !data || data.data.length === 0 ? (
+      ) : !data || rows.length === 0 ? (
         <Card className="p-0">
           {hasFilters ? (
             <EmptyState
               icon={PackageX}
               title="No SKUs match these filters."
-              description="Try a different search or status."
+              description="Try a different search, status, or product."
               action={
                 <Button variant="secondary" onClick={clearFilters}>
                   Clear filters
@@ -183,6 +224,7 @@ export function InventoryView() {
               pageSize={limit}
               total={total}
               onPageChange={(p) => patchQuery({ page: String(p) })}
+              onPageSizeChange={(s) => patchQuery({ limit: String(s), page: undefined })}
             />
           </Card>
           {/* Mobile: stacked cards + pagination. */}
@@ -201,6 +243,7 @@ export function InventoryView() {
                 pageSize={limit}
                 total={total}
                 onPageChange={(p) => patchQuery({ page: String(p) })}
+                onPageSizeChange={(s) => patchQuery({ limit: String(s), page: undefined })}
               />
             </Card>
           </div>

@@ -2,95 +2,136 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Upload,
+  UploadCloud,
+  ImageOff,
+  AlertTriangle,
+  Video,
+  Plus,
+  Trash2,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  Star,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
+import {
   useDeleteProductImage,
   useSetProductImagePrimary,
-  useUpdateProductImageAlt,
+  useUpdateProductImage,
   useUploadProductImage,
+  useReorderProductImages,
+  useAddProductVideo,
+  useDeleteProductVideo,
 } from "@/lib/api/hooks/useCatalog";
-import type { AdminProductImage } from "@/lib/api/schemas/catalog";
+import type {
+  AdminProductImage,
+  AdminProductVideo,
+  ConfigurableAttribute,
+} from "@/lib/api/schemas/catalog";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
 import { pickRendition } from "@/lib/media";
 
 /**
- * Product image upload + gallery (FR-CAT-030/031/032).
- *  - Upload one OR several files at once (POST /admin/products/{id}/images per file). The alt text is
- *    applied to every file in the batch; refine each later by selecting it.
- *  - Click a thumbnail to SELECT it: its alt text loads into the box, and you can save an edited alt
- *    (PATCH .../images/{imageId}) or promote it to primary (PATCH .../images/{imageId}/primary).
- *  - Setting primary mirrors to Product.primary_image_id, so the storefront PDP (primary-first) always
- *    shows the currently-selected primary.
- * The gallery comes from the product detail (`images[]`) and refreshes on every mutation via query
- * invalidation.
+ * Product Images & Videos (FR-CAT-030..034) — rebuilt to the design's media section
+ * (docs/design/admin-panel-design-files/Product Editor (CAT).dc.html → "Images & Videos"):
+ *  A. a persistent drag-&-drop dropzone (always visible),
+ *  B. a pending-upload tray — per-file alt input + a single per-batch "Primary" pick — with Upload / Discard,
+ *  C. a gallery grid whose tiles carry a hover action bar (grip · ↑ · ↓ · make-primary · delete),
+ *     processing / primary / color badges, and a two-step delete-confirm overlay,
+ *  D. an inline detail panel for the selected tile (alt text + color tag · Save / Set primary / Delete),
+ *  E. a Videos sub-section (URL / upload source · add / remove).
+ *
+ * Wiring: upload (one POST per file), set-primary, alt+color PATCH, delete, and reorder
+ * (PATCH .../images/reorder) are all live against the contract; reorder is optimistic and
+ * rolls back on error. The color-tag select is populated from the product's `color`
+ * configurable attribute and hides when the family exposes none. The gallery refreshes via
+ * query invalidation on every mutation.
  */
+
+type PendingFile = { id: string; file: File; preview: string; alt: string };
+
 export function ProductImageSection({
   productId,
   hasPrimary,
   images = [],
+  videos = [],
+  colorOptions = [],
+  embedded = false,
 }: {
   productId: string;
   hasPrimary: boolean;
   images?: AdminProductImage[];
+  videos?: AdminProductVideo[];
+  /** Options of the product's `color` configurable attribute (for the per-image color tag). */
+  colorOptions?: ConfigurableAttribute["options"];
+  /** When true, render bare content (no outer card/heading) — the editor wraps it. */
+  embedded?: boolean;
 }) {
   const upload = useUploadProductImage(productId);
   const setPrimary = useSetProductImagePrimary(productId);
-  const updateAlt = useUpdateProductImageAlt(productId);
+  const updateImage = useUpdateProductImage(productId);
   const remove = useDeleteProductImage(productId);
+  const reorder = useReorderProductImages(productId);
+  const addVideo = useAddProductVideo(productId);
+  const deleteVideo = useDeleteProductVideo(productId);
 
+  // ── Pending upload tray ──────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
-  const [altText, setAltText] = useState("");
-  const [makePrimary, setMakePrimary] = useState(!hasPrimary);
-  // When set, the form acts on this existing image (alt edit / set primary / delete) rather than a new upload.
+  const [pending, setPending] = useState<PendingFile[]>([]);
+  const [pendingPrimaryId, setPendingPrimaryId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const seq = useRef(0);
+
+  // ── Gallery selection / inline detail ────────────────────────────────────────
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Two-step delete: first click arms the confirm, second click within the prompt commits.
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [detailAlt, setDetailAlt] = useState("");
+  const [detailColor, setDetailColor] = useState<string>("");
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+
+  // ── Drag reorder ─────────────────────────────────────────────────────────────
+  const dragId = useRef<string | null>(null);
+
+  // ── Add-video draft ──────────────────────────────────────────────────────────
+  const [videoSource, setVideoSource] = useState<"url" | "upload">("url");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoError, setVideoError] = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
 
   const selectedImage = selectedId ? images.find((i) => i.id === selectedId) ?? null : null;
-  const editing = !!selectedImage;
+  const hasColorOptions = colorOptions.length > 0;
 
-  // Build (and clean up) local object-URL previews for the picked files, shown before upload.
+  // Revoke object-URL previews when the tray clears / unmounts.
   useEffect(() => {
-    if (files.length === 0) {
-      setPreviews([]);
-      return;
+    return () => pending.forEach((p) => URL.revokeObjectURL(p.preview));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the detail panel's fields in sync with the selected tile. Depend on the
+  // image's stable fields (not the derived object, which is fresh each render) so
+  // this only re-syncs when the selection or the upstream values actually change.
+  const selectedAlt = selectedImage?.alt_text;
+  const selectedColor = selectedImage?.color_option_id ?? "";
+  useEffect(() => {
+    if (selectedId) {
+      setDetailAlt(selectedAlt ?? "");
+      setDetailColor(selectedColor);
     }
-    const urls = files.map((f) => URL.createObjectURL(f));
-    setPreviews(urls);
-    return () => urls.forEach((u) => URL.revokeObjectURL(u));
-  }, [files]);
+  }, [selectedId, selectedAlt, selectedColor]);
 
-  const field =
-    "h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
   const busy =
-    upload.isPending || setPrimary.isPending || updateAlt.isPending || remove.isPending;
+    upload.isPending || setPrimary.isPending || updateImage.isPending || remove.isPending;
 
-  /** Pick files for a NEW upload — exits any existing-image selection. */
-  function onPickFiles(list: FileList | null) {
-    setFiles(list ? Array.from(list) : []);
-    setSelectedId(null);
-    setConfirmingDelete(false);
-    setError(null);
+  function colorLabel(id: string | null | undefined): string | null {
+    if (!id) return null;
+    return colorOptions.find((o) => o.id === id)?.value ?? null;
   }
-
-  /** Select an existing gallery image to view/edit — loads its alt and exits upload mode. */
-  function selectImage(img: AdminProductImage) {
-    setSelectedId(img.id);
-    setAltText(img.alt_text);
-    setFiles([]);
-    setConfirmingDelete(false);
-    if (fileRef.current) fileRef.current.value = "";
-    setError(null);
-  }
-
-  function resetForm() {
-    setFiles([]);
-    setAltText("");
-    setSelectedId(null);
-    setConfirmingDelete(false);
-    if (fileRef.current) fileRef.current.value = "";
+  function colorSwatch(id: string | null | undefined): string | null {
+    if (!id) return null;
+    return colorOptions.find((o) => o.id === id)?.swatch_value ?? null;
   }
 
   function handleError(err: unknown, fallback: string) {
@@ -101,301 +142,602 @@ export function ProductImageSection({
     }
   }
 
-  async function onUpload() {
-    setError(null);
-    if (files.length === 0) {
-      setError("Choose at least one image file first.");
+  // ── A/B. File picking → pending tray ─────────────────────────────────────────
+  function addToPending(list: FileList | File[] | null) {
+    const picked = Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
+    if (picked.length === 0) {
+      setError("Drop image files only (JPEG, PNG or WebP).");
       return;
     }
-    if (!altText.trim()) {
+    setError(null);
+    setSelectedId(null);
+    setPending((prev) => [
+      ...prev,
+      ...picked.map((file) => ({
+        id: `pd${(seq.current += 1)}`,
+        file,
+        preview: URL.createObjectURL(file),
+        alt: "",
+      })),
+    ]);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function setPendingAlt(id: string, alt: string) {
+    setPending((prev) => prev.map((p) => (p.id === id ? { ...p, alt } : p)));
+  }
+
+  function removePending(id: string) {
+    setPending((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((p) => p.id !== id);
+    });
+    setPendingPrimaryId((cur) => (cur === id ? null : cur));
+  }
+
+  function discardPending() {
+    pending.forEach((p) => URL.revokeObjectURL(p.preview));
+    setPending([]);
+    setPendingPrimaryId(null);
+    setError(null);
+  }
+
+  async function onUploadPending() {
+    setError(null);
+    if (pending.length === 0) return;
+    if (pending.some((p) => !p.alt.trim())) {
       setError("Alt text is required for every image.");
       return;
     }
     try {
-      // Upload sequentially; only the first carries is_primary so a batch promotes exactly one image.
-      for (let i = 0; i < files.length; i++) {
-        await upload.mutateAsync({
-          file: files[i],
-          alt_text: altText.trim(),
-          is_primary: makePrimary && i === 0,
-        });
+      // Upload sequentially; the chosen pending file (if any) carries is_primary so
+      // a batch promotes exactly one image. When none is chosen and the product has
+      // no primary yet, the first uploaded image becomes primary.
+      const promoteFallback = !hasPrimary;
+      for (let i = 0; i < pending.length; i++) {
+        const p = pending[i];
+        const isPrimary = pendingPrimaryId
+          ? p.id === pendingPrimaryId
+          : promoteFallback && i === 0;
+        await upload.mutateAsync({ file: p.file, alt_text: p.alt.trim(), is_primary: isPrimary });
       }
-      toast(files.length > 1 ? `${files.length} images uploaded.` : "Image uploaded.");
-      resetForm();
+      toast(pending.length > 1 ? `${pending.length} images uploaded.` : "Image uploaded.");
+      pending.forEach((p) => URL.revokeObjectURL(p.preview));
+      setPending([]);
+      setPendingPrimaryId(null);
     } catch (err) {
-      handleError(err, "Couldn't upload the image. Check the file — type, size, or alt text.");
+      handleError(err, "Couldn't upload. Check each file — type, size (≤ 5 MB), and alt text.");
     }
   }
 
-  async function onSaveAlt() {
-    if (!selectedImage) return;
-    setError(null);
-    if (!altText.trim()) {
-      setError("Alt text can't be empty.");
-      return;
-    }
-    try {
-      await updateAlt.mutateAsync({ imageId: selectedImage.id, alt_text: altText.trim() });
-      toast("Alt text updated.");
-    } catch (err) {
-      handleError(err, "Couldn't update the alt text. Try again.");
-    }
+  // ── C. Gallery actions ───────────────────────────────────────────────────────
+  function selectTile(img: AdminProductImage) {
+    setSelectedId((cur) => (cur === img.id ? null : img.id));
+    setConfirmingDeleteId(null);
   }
 
-  async function onSetPrimary() {
-    if (!selectedImage || selectedImage.is_primary) return;
+  async function onMakePrimary(img: AdminProductImage) {
+    if (img.is_primary) return;
     setError(null);
     try {
-      await setPrimary.mutateAsync(selectedImage.id);
-      toast("Primary image updated.");
+      await setPrimary.mutateAsync(img.id);
+      toast("Primary image set.");
     } catch (err) {
       handleError(err, "Couldn't set the primary image. Try again.");
     }
   }
 
-  async function onDelete() {
-    if (!selectedImage) return;
+  async function move(img: AdminProductImage, dir: -1 | 1) {
+    const i = images.findIndex((x) => x.id === img.id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= images.length) return;
+    const ids = images.map((x) => x.id);
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    persistOrder(ids);
+  }
+
+  function onDropReorder(targetId: string) {
+    const from = dragId.current;
+    dragId.current = null;
+    if (!from || from === targetId) return;
+    const ids = images.map((x) => x.id);
+    const fi = ids.indexOf(from);
+    const ti = ids.indexOf(targetId);
+    if (fi < 0 || ti < 0) return;
+    const [m] = ids.splice(fi, 1);
+    ids.splice(ti, 0, m);
+    persistOrder(ids);
+  }
+
+  async function persistOrder(orderedIds: string[]) {
     setError(null);
     try {
-      await remove.mutateAsync(selectedImage.id);
+      await reorder.mutateAsync(orderedIds);
+    } catch (err) {
+      handleError(err, "Couldn't save the new order. Try again.");
+    }
+  }
+
+  async function onConfirmDelete(img: AdminProductImage) {
+    setError(null);
+    try {
+      await remove.mutateAsync(img.id);
       toast(
-        selectedImage.is_primary
+        img.is_primary
           ? "Image deleted. Primary reassigned to the next image."
           : "Image deleted.",
       );
-      resetForm();
+      setConfirmingDeleteId(null);
+      if (selectedId === img.id) setSelectedId(null);
     } catch (err) {
       handleError(err, "Couldn't delete the image. Try again.");
     }
   }
 
+  // ── D. Detail panel ──────────────────────────────────────────────────────────
+  async function onSaveDetail() {
+    if (!selectedImage) return;
+    setError(null);
+    if (!detailAlt.trim()) {
+      setError("Alt text is required for every image.");
+      return;
+    }
+    const next: { imageId: string; alt_text?: string; color_option_id?: string | null } = {
+      imageId: selectedImage.id,
+    };
+    if (detailAlt.trim() !== selectedImage.alt_text) next.alt_text = detailAlt.trim();
+    if (hasColorOptions) {
+      const nextColor = detailColor || null;
+      if (nextColor !== (selectedImage.color_option_id ?? null)) next.color_option_id = nextColor;
+    }
+    if (next.alt_text === undefined && next.color_option_id === undefined) {
+      toast("Nothing to save.");
+      return;
+    }
+    try {
+      await updateImage.mutateAsync(next);
+      toast("Image saved.");
+    } catch (err) {
+      handleError(err, "Couldn't save the image. Try again.");
+    }
+  }
+
+  // ── E. Videos ────────────────────────────────────────────────────────────────
+  async function onAddVideo() {
+    setVideoError(null);
+    const url = videoUrl.trim();
+    if (!url) { setVideoError("Enter a video URL."); return; }
+    try { new URL(url); } catch { setVideoError("Enter a valid video URL."); return; }
+    try {
+      await addVideo.mutateAsync({ source: videoSource, url, display_order: videos.length });
+      setVideoUrl("");
+      toast("Video added.");
+    } catch {
+      toast("Couldn't add the video. Try again.", "error");
+    }
+  }
+
+  async function onRemoveVideo(id: string) {
+    try {
+      await deleteVideo.mutateAsync(id);
+      toast("Video removed.");
+    } catch {
+      toast("Couldn't remove the video. Try again.", "error");
+    }
+  }
+
+  // ── Shared classes ───────────────────────────────────────────────────────────
+  const field =
+    "h-[36px] w-full rounded-lg border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600";
+  const tileBtn =
+    "inline-flex h-[26px] w-[26px] items-center justify-center rounded-md bg-white/90 text-text-secondary shadow-xs transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40";
+
+  const Wrapper = embedded ? "div" : "section";
   return (
-    <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">Images</h2>
-        <span
-          className={
-            "rounded-full px-2 py-0.5 text-xs font-medium " +
-            (hasPrimary ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700")
-          }
-        >
-          {hasPrimary ? "Primary image set" : "No primary image yet"}
+    <Wrapper
+      className={
+        embedded ? "flex flex-col gap-[18px]" : "flex flex-col gap-[18px] rounded-xl border border-border bg-surface p-5"
+      }
+    >
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <h2 className="text-[15px] font-semibold text-text">Images &amp; Videos</h2>
+          <span className="text-xs tabular-nums text-text-muted">
+            {images.length} {images.length === 1 ? "image" : "images"}
+            {videos.length > 0 && ` · ${videos.length} ${videos.length === 1 ? "video" : "videos"}`}
+          </span>
+        </div>
+      )}
+
+      {/* ── A. PERSISTENT DROPZONE ─────────────────────────────────────────────── */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Upload images — drag and drop or browse"
+        onClick={() => fileRef.current?.click()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileRef.current?.click(); } }}
+        onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); addToPending(e.dataTransfer.files); }}
+        className={
+          "flex cursor-pointer flex-col items-center gap-2.5 rounded-xl border-[1.5px] border-dashed px-5 py-[26px] text-center transition-colors " +
+          (dragOver ? "border-accent-600 bg-accent-50" : "border-border-strong bg-surface hover:bg-surface-subtle")
+        }
+      >
+        <span className="flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-accent-50 text-accent-600">
+          <Upload className="h-5 w-5" aria-hidden="true" />
         </span>
+        <div className="text-[13.5px] font-semibold text-text-secondary">
+          Drag &amp; drop images here, or <span className="text-accent-600">browse</span>
+        </div>
+        <div className="text-xs text-text-muted">JPEG, PNG or WebP, up to 5 MB each. You can select multiple files.</div>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(e) => addToPending(e.target.files)}
+          className="hidden"
+        />
       </div>
 
-      {/* Existing gallery — click a thumbnail to select it (loads alt, enables set-primary). */}
-      {images.length > 0 ? (
-        <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-          {images.map((img) => (
-            <li key={img.id}>
-              <button
-                type="button"
-                onClick={() => selectImage(img)}
-                aria-pressed={selectedId === img.id}
-                className={
-                  "group relative block w-full overflow-hidden rounded-md border bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 " +
-                  (selectedId === img.id
-                    ? "border-brand-500 ring-2 ring-brand-500/40"
-                    : "border-gray-200 hover:border-brand-300")
-                }
-              >
+      {/* ── B. PENDING UPLOAD TRAY ─────────────────────────────────────────────── */}
+      {pending.length > 0 && (
+        <div className="rounded-xl border border-accent-100 bg-accent-50 p-3.5">
+          <div className="mb-2.5 flex items-center justify-between gap-2.5">
+            <span className="text-[13px] font-bold text-accent-700">Pending upload · {pending.length}</span>
+            <span className="text-[11.5px] text-text-secondary">Alt text is required for every image.</span>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {pending.map((p) => (
+              <div key={p.id} className="flex items-center gap-2.5 rounded-[10px] border border-border bg-surface px-2.5 py-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={pickRendition(img.renditions, img.url)}
-                  alt={img.alt_text}
-                  className="aspect-square w-full object-cover"
+                <img src={p.preview} alt="" className="h-[42px] w-[42px] shrink-0 rounded-lg border border-border object-cover" />
+                <input
+                  type="text"
+                  aria-label="Alt text for pending image"
+                  placeholder="Add alt text (required)…"
+                  value={p.alt}
+                  onChange={(e) => setPendingAlt(p.id, e.target.value)}
+                  maxLength={160}
+                  className={
+                    "h-[34px] min-w-0 flex-1 rounded-lg border bg-surface px-2.5 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
+                    (p.alt.trim() ? "border-border-strong" : "border-warning/60")
+                  }
                 />
-                {img.is_primary && (
-                  <span className="absolute left-1 top-1 rounded bg-green-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                    Primary
+                <button
+                  type="button"
+                  onClick={() => setPendingPrimaryId((cur) => (cur === p.id ? null : p.id))}
+                  aria-pressed={pendingPrimaryId === p.id}
+                  className={
+                    "inline-flex h-[34px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-semibold transition " +
+                    (pendingPrimaryId === p.id
+                      ? "border-accent-600 bg-accent-600 text-accent-fg"
+                      : "border-border-strong bg-surface text-text-secondary hover:bg-surface-subtle")
+                  }
+                >
+                  <span
+                    className={
+                      "inline-flex h-[13px] w-[13px] items-center justify-center rounded-full border-[1.5px] " +
+                      (pendingPrimaryId === p.id ? "border-accent-fg" : "border-border-strong")
+                    }
+                  >
+                    {pendingPrimaryId === p.id && <span className="h-1.5 w-1.5 rounded-full bg-accent-fg" />}
                   </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="rounded-md border border-dashed border-gray-200 px-3 py-6 text-center text-sm text-gray-400">
-          No images yet. Upload the first one below.
-        </p>
+                  Primary
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removePending(p.id)}
+                  aria-label="Remove pending image"
+                  className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface text-error hover:bg-error-50"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onUploadPending}
+              disabled={upload.isPending}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent-600 px-[15px] text-[13px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50"
+            >
+              <UploadCloud className="h-4 w-4" aria-hidden="true" />
+              {upload.isPending
+                ? "Uploading…"
+                : pending.length > 1
+                  ? `Upload ${pending.length} images`
+                  : "Upload image"}
+            </button>
+            <button
+              type="button"
+              onClick={discardPending}
+              disabled={upload.isPending}
+              className="h-9 rounded-lg px-3 text-[13px] font-semibold text-text-secondary hover:bg-surface-subtle disabled:opacity-50"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
       )}
 
       {error && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
+        <p role="alert" className="rounded-lg bg-error-50 px-3 py-2 text-sm text-error">{error}</p>
       )}
 
-      {editing ? (
-        // ── Edit mode: act on the selected existing image ──────────────────────────────
-        <div className="space-y-4 rounded-md border border-brand-200 bg-brand-50/40 p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-900">
-              Editing selected image{selectedImage?.is_primary ? " (primary)" : ""}
+      {/* ── C. GALLERY ─────────────────────────────────────────────────────────── */}
+      <div>
+        <div className="mb-2.5 flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <h3 className="text-[13px] font-semibold text-text">Gallery</h3>
+            <span className="text-[11.5px] tabular-nums text-text-muted">
+              {images.length} {images.length === 1 ? "image" : "images"}
             </span>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="text-xs font-medium text-brand-700 hover:underline"
-            >
-              + Add new image instead
-            </button>
           </div>
+          {images.length > 0 && (
+            <span className="text-[11.5px] text-text-muted">Drag, or use ↑ ↓, to reorder.</span>
+          )}
+        </div>
 
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-900">Alt text *</span>
-            <input
-              className={field}
-              value={altText}
-              onChange={(e) => setAltText(e.target.value)}
-              maxLength={160}
-              placeholder="Describe the image for accessibility"
-              aria-required
-            />
-          </label>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={onSaveAlt}
-              disabled={busy}
-              className="inline-flex h-10 items-center rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {updateAlt.isPending ? "Saving…" : "Save alt text"}
-            </button>
-            <button
-              type="button"
-              onClick={onSetPrimary}
-              disabled={busy || selectedImage?.is_primary}
-              className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {selectedImage?.is_primary
-                ? "Already primary"
-                : setPrimary.isPending
-                  ? "Setting…"
-                  : "Set as primary"}
-            </button>
-
-            {/* Delete — two-step inline confirm so it can't fire on a single stray click. */}
-            {confirmingDelete ? (
-              <span className="ml-auto inline-flex items-center gap-2">
-                <span className="text-sm text-gray-600">Delete this image?</span>
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  disabled={busy}
-                  className="inline-flex h-10 items-center rounded-md bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+        {images.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface-subtle px-5 py-9 text-center">
+            <span className="mb-3 flex h-[42px] w-[42px] items-center justify-center rounded-full bg-surface text-text-muted">
+              <ImageOff className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="text-[13.5px] font-semibold text-text">No images yet. Upload the first one above.</div>
+            <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-warning">
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+              A published product needs at least one image.
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3">
+            {images.map((img, idx) => {
+              const cLabel = colorLabel(img.color_option_id);
+              const cSwatch = colorSwatch(img.color_option_id);
+              return (
+                <div
+                  key={img.id}
+                  draggable
+                  onDragStart={() => { dragId.current = img.id; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); onDropReorder(img.id); }}
+                  onClick={() => selectTile(img)}
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter") selectTile(img); }}
+                  aria-label={`Image: ${img.alt_text}`}
+                  className={
+                    "group relative aspect-square cursor-pointer overflow-hidden rounded-xl border-2 bg-surface-subtle transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
+                    (selectedId === img.id ? "border-accent-600" : "border-border hover:border-accent-500")
+                  }
                 >
-                  {remove.isPending ? "Deleting…" : "Confirm delete"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  disabled={busy}
-                  className="inline-flex h-10 items-center rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(true)}
-                disabled={busy}
-                className="ml-auto inline-flex h-10 items-center rounded-md border border-red-300 px-4 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-              >
-                Delete
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={pickRendition(img.renditions, img.url)}
+                    alt={img.alt_text}
+                    className="h-full w-full object-cover"
+                  />
+
+                  {/* top action bar — visible on hover / focus / when selected */}
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className={
+                      "absolute inset-x-0 top-0 flex items-center justify-between gap-1 bg-gradient-to-b from-black/50 to-transparent p-1.5 transition-opacity " +
+                      (selectedId === img.id ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100")
+                    }
+                  >
+                    <span className="inline-flex h-[26px] w-[26px] cursor-grab items-center justify-center text-white" title="Drag to reorder">
+                      <GripVertical className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => move(img, -1)} disabled={idx === 0 || reorder.isPending} aria-label="Move up" className={tileBtn}>
+                        <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                      <button type="button" onClick={() => move(img, 1)} disabled={idx === images.length - 1 || reorder.isPending} aria-label="Move down" className={tileBtn}>
+                        <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                      <button type="button" onClick={() => onMakePrimary(img)} disabled={img.is_primary || busy} aria-label="Make primary" title="Make primary" className={tileBtn + (img.is_primary ? " text-accent-600" : "")}>
+                        <Star className={"h-3.5 w-3.5 " + (img.is_primary ? "fill-accent-600" : "")} aria-hidden="true" />
+                      </button>
+                      <button type="button" onClick={() => setConfirmingDeleteId(img.id)} aria-label="Delete image" title="Delete" className={tileBtn + " text-error"}>
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* primary badge */}
+                  {img.is_primary && (
+                    <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-accent-600 px-2 py-0.5 text-[11px] font-semibold text-accent-fg">
+                      <Star className="h-3 w-3 fill-current" aria-hidden="true" />Primary
+                    </span>
+                  )}
+
+                  {/* color tag */}
+                  {cLabel && (
+                    <span className="absolute bottom-2 right-2 inline-flex items-center gap-1.5 rounded-md bg-white/95 px-2 py-0.5 text-[11px] font-semibold text-text-secondary shadow-xs">
+                      <span
+                        className="h-[9px] w-[9px] rounded-full border border-border"
+                        style={cSwatch ? { backgroundColor: cSwatch } : undefined}
+                      />
+                      {cLabel}
+                    </span>
+                  )}
+
+                  {/* two-step delete confirm overlay */}
+                  {confirmingDeleteId === img.id && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-black/80 p-3"
+                    >
+                      <span className="text-center text-[13px] font-semibold text-white">Delete this image?</span>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => onConfirmDelete(img)} disabled={remove.isPending} className="h-8 rounded-lg bg-error px-3 text-[12.5px] font-semibold text-white hover:bg-error/90 disabled:opacity-50">
+                          {remove.isPending ? "Deleting…" : "Delete"}
+                        </button>
+                        <button type="button" onClick={() => setConfirmingDeleteId(null)} disabled={remove.isPending} className="h-8 rounded-lg bg-white/90 px-3 text-[12.5px] font-semibold text-text-secondary hover:bg-white disabled:opacity-50">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── D. INLINE DETAIL PANEL ─────────────────────────────────────────────── */}
+      {selectedImage && (
+        <div className="flex flex-wrap gap-4 rounded-xl border-[1.5px] border-accent-600 p-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={pickRendition(selectedImage.renditions, selectedImage.url)}
+            alt={selectedImage.alt_text}
+            className="h-[140px] w-[140px] shrink-0 rounded-lg border border-border object-cover"
+          />
+          <div className="min-w-[220px] flex-1">
+            <div className="mb-3 flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-accent-600" aria-hidden="true" />
+                <h3 className="text-[13.5px] font-semibold text-text">Image details</h3>
+                {selectedImage.is_primary && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-700">
+                    <Star className="h-3 w-3 fill-current" aria-hidden="true" />Primary
+                  </span>
+                )}
+              </div>
+              <button type="button" onClick={() => setSelectedId(null)} aria-label="Close details" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary hover:bg-surface-subtle">
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
-            )}
+            </div>
+            <div className={"grid items-start gap-3 " + (hasColorOptions ? "grid-cols-1 sm:grid-cols-[1fr_180px]" : "grid-cols-1")}>
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">Alt text <span className="text-error">*</span></span>
+                <input
+                  type="text"
+                  className={field}
+                  value={detailAlt}
+                  onChange={(e) => setDetailAlt(e.target.value)}
+                  maxLength={160}
+                  placeholder="Describe the image…"
+                  aria-required
+                />
+                {!detailAlt.trim() && <span className="mt-1 block text-[11.5px] text-error">Alt text is required for every image.</span>}
+              </label>
+              {hasColorOptions && (
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">Color tag</span>
+                  <select
+                    aria-label="Color tag"
+                    value={detailColor}
+                    onChange={(e) => setDetailColor(e.target.value)}
+                    className={field + " cursor-pointer"}
+                  >
+                    <option value="">None</option>
+                    {colorOptions.map((o) => (
+                      <option key={o.id} value={o.id}>{o.value}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2.5">
+              <button type="button" onClick={onSaveDetail} disabled={busy} className="inline-flex h-[34px] items-center rounded-lg bg-accent-600 px-3.5 text-[12.5px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50">
+                {updateImage.isPending ? "Saving…" : "Save"}
+              </button>
+              {!selectedImage.is_primary && (
+                <button type="button" onClick={() => onMakePrimary(selectedImage)} disabled={busy} className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-3 text-[12.5px] font-semibold text-text hover:bg-surface-subtle disabled:opacity-50">
+                  <Star className="h-3.5 w-3.5" aria-hidden="true" />Set primary
+                </button>
+              )}
+              <button type="button" onClick={() => onConfirmDelete(selectedImage)} disabled={busy} className="ml-auto inline-flex h-[34px] items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error hover:bg-error-50 disabled:opacity-50">
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Delete
+              </button>
+            </div>
           </div>
         </div>
-      ) : (
-        // ── Upload mode: add one or more new images ────────────────────────────────────
-        <>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-900">Image file</span>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(e) => onPickFiles(e.target.files)}
-              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700"
-            />
-            <span className="mt-1 block text-xs text-gray-400">
-              JPEG, PNG or WebP, up to 5 MB each. You can select multiple files.
-            </span>
-          </label>
-
-          {/* Local previews of the picked files, before they are uploaded. */}
-          {previews.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3">
-              {previews.map((src, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={src}
-                  src={src}
-                  alt={`Selected file ${i + 1} preview`}
-                  className="h-20 w-20 rounded-md border border-gray-200 object-cover"
-                />
-              ))}
-              <span className="text-xs text-gray-500">
-                {previews.length === 1
-                  ? "Preview — not uploaded yet."
-                  : `${previews.length} files — not uploaded yet.`}
-              </span>
-            </div>
-          )}
-
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-900">Alt text *</span>
-            <input
-              className={field}
-              value={altText}
-              onChange={(e) => setAltText(e.target.value)}
-              maxLength={160}
-              placeholder="Describe the image for accessibility"
-              aria-required
-            />
-            {files.length > 1 && (
-              <span className="mt-1 block text-xs text-gray-400">
-                Applied to all {files.length} files — select a thumbnail afterward to refine each.
-              </span>
-            )}
-          </label>
-
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={makePrimary}
-              onChange={(e) => setMakePrimary(e.target.checked)}
-            />
-            Set as primary image{files.length > 1 ? " (first file)" : ""}
-          </label>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onUpload}
-              disabled={busy}
-              className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {upload.isPending
-                ? "Uploading…"
-                : files.length > 1
-                  ? `Upload ${files.length} images`
-                  : "Upload image"}
-            </button>
-          </div>
-        </>
       )}
 
-      <p className="text-xs text-gray-400">
-        Click any thumbnail to edit its alt text, make it the primary image, or delete it. Deleting the
-        primary promotes the next image automatically. Reordering still needs more backend support —
-        flagged.
-      </p>
-    </section>
+      {/* ── E. VIDEOS ──────────────────────────────────────────────────────────── */}
+      <div className="border-t border-border pt-4">
+        <div className="mb-2.5 flex items-center gap-2">
+          <Video className="h-4 w-4 text-accent-600" aria-hidden="true" />
+          <h3 className="text-[13px] font-semibold text-text">Videos</h3>
+          <span className="text-[11.5px] tabular-nums text-text-muted">
+            {videos.length} {videos.length === 1 ? "video" : "videos"}
+          </span>
+        </div>
+
+        {videos.length === 0 ? (
+          <div className="pb-3 text-[12.5px] text-text-muted">No videos yet.</div>
+        ) : (
+          <div className="mb-3 flex flex-col gap-2.5">
+            {videos.map((v) => (
+              <div key={v.id} className="flex items-center gap-2.5">
+                <span className="inline-flex h-9 shrink-0 items-center rounded-lg border border-border-strong bg-surface-subtle px-2.5 text-xs font-semibold text-text-secondary">
+                  {v.source === "upload" ? "Upload" : "URL"}
+                </span>
+                <a
+                  href={v.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 flex-1 truncate rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-accent-700 hover:underline"
+                >
+                  {v.url}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => onRemoveVideo(v.id)}
+                  disabled={deleteVideo.isPending}
+                  aria-label="Remove video"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface text-error hover:bg-error-50 disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add-video row: source select + URL input + Add. */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <select
+            aria-label="Video source"
+            value={videoSource}
+            onChange={(e) => setVideoSource(e.target.value as "url" | "upload")}
+            className="h-9 w-[104px] shrink-0 cursor-pointer rounded-lg border border-border-strong bg-surface px-2.5 text-sm font-medium text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+          >
+            <option value="url">URL</option>
+            <option value="upload">Upload</option>
+          </select>
+          <input
+            type="text"
+            aria-label="Video URL"
+            placeholder="https://…"
+            value={videoUrl}
+            onChange={(e) => { setVideoUrl(e.target.value); setVideoError(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onAddVideo(); } }}
+            className={
+              "h-9 min-w-0 flex-1 rounded-lg border bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
+              (videoError ? "border-error" : "border-border-strong")
+            }
+          />
+          <button
+            type="button"
+            onClick={onAddVideo}
+            disabled={addVideo.isPending}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-3 text-[12.5px] font-semibold text-text hover:bg-surface-subtle disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />{addVideo.isPending ? "Adding…" : "Add video"}
+          </button>
+        </div>
+        {videoError && <p className="mt-2 text-[11.5px] text-error">{videoError}</p>}
+      </div>
+    </Wrapper>
   );
 }

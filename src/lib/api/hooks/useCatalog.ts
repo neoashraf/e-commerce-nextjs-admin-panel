@@ -366,6 +366,24 @@ export function useDeleteProduct() {
   });
 }
 
+/** Per-item outcome of a bulk publish/archive (batch never aborts — some may fail validation). */
+export type BulkStatusResult = {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  results: Array<{ id: string; ok: boolean; status?: string; code?: string; details?: string[] }>;
+};
+
+/** Bulk publish / archive selected products — PATCH /admin/products/bulk-status (FR-CAT-015/016). */
+export function useBulkProductStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: "published" | "archived" }) =>
+      api.patch<BulkStatusResult>("/admin/products/bulk-status", { ids, status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+  });
+}
+
 // ---- Product editor (catalog-product-editor-fe) ----
 import {
   productDetailSchema as _pds,

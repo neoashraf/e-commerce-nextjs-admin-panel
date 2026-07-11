@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowUpCircle, Download, Pencil, Search, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpCircle, Box, Download, Layers, Pencil, Search, Trash2 } from "lucide-react";
 import {
   useProducts,
   useProductStatus,
+  useBulkProductStatus,
   useDeleteProduct,
   useFamilies,
   useCategoryTree,
@@ -21,6 +22,7 @@ import { toast } from "@/lib/stores/toast";
 import { usePageParams } from "@/lib/usePageParams";
 import { buildCsv, downloadCsv, fetchAllRows, todayStamp } from "@/lib/exportCsv";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { CreateProductDialog } from "@/components/catalog/CreateProductDialog";
 import {
   Badge,
   Button,
@@ -91,21 +93,65 @@ export function ProductsView() {
   const type = sp.get("type") ?? "";
   const category = sp.get("category") ?? "";
   const q = sp.get("q") ?? "";
+  const sort = sp.get("sort") ?? "";
+  const order = sp.get("order") ?? "";
   const { page, pageSize, setPage, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useProducts({
-    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, category: category || undefined, page, limit: pageSize,
+    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, category: category || undefined, sort: sort || undefined, order: order || undefined, page, limit: pageSize,
   });
   const { data: families } = useFamilies();
   const { data: categoryTree } = useCategoryTree();
   const statusM = useProductStatus();
+  const bulkM = useBulkProductStatus();
   const del = useDeleteProduct();
   const [confirm, setConfirm] = useState<{ kind: "archive" | "delete"; product: ProductRow } | null>(null);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
 
   const rows = data?.data ?? [];
   const total = data?.meta.total ?? 0;
   const categoryOptions = flattenCategories(categoryTree ?? []);
   const [exporting, setExporting] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  // Row selection for bulk publish/archive. Scoped to the current page; reset whenever the visible
+  // rows change (page/filter/search/refetch) so a bulk action never targets stale, off-screen ids.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const rowIdsKey = rows.map((r) => r.id).join(",");
+  useEffect(() => setSelected(new Set()), [rowIdsKey]);
+  const allOnPageSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  function toggleRow(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected(allOnPageSelected ? new Set() : new Set(rows.map((r) => r.id)));
+  }
+  async function runBulk(next: "published" | "archived") {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    try {
+      const res = await bulkM.mutateAsync({ ids, status: next });
+      const verb = next === "published" ? "published" : "archived";
+      const n = (c: number) => `${c} ${c === 1 ? "product" : "products"}`;
+      if (res.failed === 0) {
+        toast(`${n(res.succeeded)} ${verb}.`);
+      } else if (res.succeeded === 0) {
+        toast(`Couldn't ${next === "published" ? "publish" : "archive"} ${n(res.failed)} — check they're eligible.`, "error");
+      } else {
+        toast(`${n(res.succeeded)} ${verb}; ${res.failed} skipped (not eligible).`, "info");
+      }
+      setSelected(new Set());
+      setBulkConfirm(false);
+    } catch {
+      toast("Couldn't apply the bulk action. Try again.", "error");
+      setBulkConfirm(false);
+    }
+  }
 
   /**
    * Export the current filtered result set as CSV (products-list design + API
@@ -149,6 +195,18 @@ export function ProductsView() {
     if (key !== "page") next.delete("page"); // filter/search change → back to page 1
     router.push(`${pathname}?${next.toString()}`);
   }
+
+  /** Toggle column sort (FR-CAT-042): same column flips asc↔desc; a new column starts ascending. */
+  function toggleSort(key: "name" | "price" | "status") {
+    const nextOrder = sort === key && order === "asc" ? "desc" : "asc";
+    const next = new URLSearchParams(sp.toString());
+    next.set("sort", key);
+    next.set("order", nextOrder);
+    next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+  const sortDir = (key: string): "asc" | "desc" | undefined =>
+    sort === key ? (order === "desc" ? "desc" : "asc") : undefined;
 
   async function publish(p: ProductRow) {
     try {
@@ -213,12 +271,13 @@ export function ProductsView() {
             </Button>
           </Can>
           <Can permission="catalog.product.create">
-            <Link
-              href="/admin/products/new"
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
               className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent-600 px-4 text-sm font-medium text-accent-fg shadow-xs transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-2"
             >
               Create product
-            </Link>
+            </button>
           </Can>
         </div>
       </div>
@@ -268,20 +327,68 @@ export function ProductsView() {
 
       <Card>
         {isLoading ? (
-          <SkeletonRows rows={10} cols={7} />
+          <SkeletonRows rows={10} cols={8} />
         ) : isError ? (
           <ErrorState description="Couldn't load products." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
           <EmptyState title="No products match your filters." description="Try clearing search or widening the filters." />
         ) : (
           <>
+            {selected.size > 0 && (
+              <Can permission="catalog.product.update">
+                <div className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-subtle px-4 py-2.5">
+                  <span className="text-sm font-medium text-text">
+                    {selected.size} selected
+                  </span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leadingIcon={<ArrowUpCircle className="h-4 w-4" aria-hidden="true" />}
+                      loading={bulkM.isPending}
+                      onClick={() => runBulk("published")}
+                    >
+                      Publish
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leadingIcon={<Archive className="h-4 w-4" aria-hidden="true" />}
+                      loading={bulkM.isPending}
+                      onClick={() => setBulkConfirm(true)}
+                    >
+                      Archive
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(new Set())}
+                      className="rounded-md px-2 py-1 text-sm text-text-muted hover:text-text"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </Can>
+            )}
             <Table>
               <THead>
                 <TR hover={false}>
-                  <TH>Product</TH>
-                  <TH numeric>Price</TH>
+                  <TH className="w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all products on this page"
+                      className="h-4 w-4 rounded border-border text-accent-600 focus:ring-accent-600"
+                      checked={allOnPageSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = selected.size > 0 && !allOnPageSelected;
+                      }}
+                      onChange={toggleAll}
+                    />
+                  </TH>
+                  <TH sort={sortDir("name")} onSort={() => toggleSort("name")}>Product</TH>
+                  <TH numeric sort={sortDir("price")} onSort={() => toggleSort("price")}>Price</TH>
                   <TH numeric>Qty</TH>
-                  <TH>Status</TH>
+                  <TH sort={sortDir("status")} onSort={() => toggleSort("status")}>Status</TH>
                   <TH>Category</TH>
                   <TH>Type</TH>
                   <TH className="text-right"><span className="sr-only">Actions</span></TH>
@@ -290,6 +397,15 @@ export function ProductsView() {
               <TBody>
                 {rows.map((p) => (
                   <TR key={p.id}>
+                    <TD>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${p.name}`}
+                        className="h-4 w-4 rounded border-border text-accent-600 focus:ring-accent-600"
+                        checked={selected.has(p.id)}
+                        onChange={() => toggleRow(p.id)}
+                      />
+                    </TD>
                     <TD>
                       <div className="flex items-center gap-3">
                         <span className="h-10 w-10 shrink-0 overflow-hidden rounded bg-surface-subtle">
@@ -323,7 +439,16 @@ export function ProductsView() {
                     </TD>
                     <TD><StatusPill status={p.status} /></TD>
                     <TD>{p.primary_category ?? "—"}</TD>
-                    <TD><Badge tone="neutral" className="capitalize">{p.type ?? "simple"}</Badge></TD>
+                    <TD>
+                      <Badge tone="neutral" className="gap-1.5 capitalize">
+                        {(p.type ?? "simple") === "configurable" ? (
+                          <Layers className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+                        ) : (
+                          <Box className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+                        )}
+                        {p.type ?? "simple"}
+                      </Badge>
+                    </TD>
                     <TD className="text-right">
                       <div className="flex items-center justify-end">
                         <RowActions label={`Actions for ${p.name}`} width="w-44">
@@ -408,6 +533,19 @@ export function ProductsView() {
         pending={statusM.isPending || del.isPending}
         onConfirm={runConfirm}
         onClose={() => setConfirm(null)}
+      />
+
+      <CreateProductDialog open={createOpen} onClose={() => setCreateOpen(false)} />
+
+      <ConfirmDialog
+        open={bulkConfirm}
+        title={`Archive ${selected.size} ${selected.size === 1 ? "product" : "products"}?`}
+        message="Archived products are hidden from the storefront but kept for order history. Already-archived items are skipped."
+        confirmLabel="Archive"
+        danger
+        pending={bulkM.isPending}
+        onConfirm={() => runBulk("archived")}
+        onClose={() => setBulkConfirm(false)}
       />
     </div>
   );

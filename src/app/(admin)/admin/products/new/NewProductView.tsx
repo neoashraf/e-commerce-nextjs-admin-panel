@@ -1,20 +1,29 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useFamilies } from "@/lib/api/hooks/useCatalog";
 import { ProductEditor } from "@/components/catalog/ProductEditor";
 
 /**
- * Create-product entry (catalog-product-editor-fe). A small Type/Family/SKU
- * dialog (no orphan drafts — the POST defers to the editor's first Save), then
- * the family-driven editor in create mode.
+ * Create-product entry (catalog-product-editor-fe). Normally reached from the
+ * products list's Create-product dialog (Products (CAT) design · FR-CAT-010),
+ * which passes `type`/`family`/`sku` as query params → we open the family-driven
+ * editor straight away (its first Save creates the product — no orphan drafts).
+ * A minimal inline form remains as a fallback for direct navigation without params.
  */
 export function NewProductView() {
+  const sp = useSearchParams();
+  const paramType = sp.get("type") === "configurable" ? "configurable" : "simple";
+  const paramFamily = sp.get("family") ?? "";
+  const paramSku = sp.get("sku") ?? "";
+  const hasParams = !!paramFamily && !!paramSku;
+
   const { data: families } = useFamilies();
-  const [type, setType] = useState<"simple" | "configurable">("simple");
-  const [familyId, setFamilyId] = useState("");
-  const [sku, setSku] = useState("");
-  const [started, setStarted] = useState(false);
+  const [type, setType] = useState<"simple" | "configurable">(paramType);
+  const [familyId, setFamilyId] = useState(paramFamily);
+  const [sku, setSku] = useState(paramSku);
+  const [started, setStarted] = useState(hasParams);
 
   if (started) {
     return <ProductEditor mode="create" initial={{ type, family_id: familyId || undefined, sku: sku || undefined }} />;

@@ -161,6 +161,9 @@ export function ProductEditor({
   }, [basePrice, salePrice]);
 
   const saleInvalid = !!(salePrice && basePrice && Number(salePrice) >= Number(basePrice));
+  // Whether the effective price is the sale price (vs. the base) — drives the "· sale/base price" note.
+  const usingSalePrice =
+    !!salePrice && Number(salePrice) > 0 && !saleInvalid && (!basePrice || Number(salePrice) < Number(basePrice));
 
   // Section refs let onSave/onPublish jump to the offending section on a validation error.
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -488,8 +491,12 @@ export function ProductEditor({
                   </label>
                 </div>
                 <div className="flex items-center gap-2 rounded-lg bg-surface-subtle px-3 py-2.5 text-xs text-text-secondary">
-                  <Banknote className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                  <span>Effective price <strong className="font-bold tabular-nums">৳{effectivePrice.toLocaleString("en-US")}</strong></span>
+                  <Tags className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                  <span>
+                    Effective price{" "}
+                    <strong className="font-bold tabular-nums">৳ {effectivePrice.toLocaleString("en-US")}</strong>{" "}
+                    <span className="text-text-muted">· {usingSalePrice ? "sale price" : "base price"}</span>
+                  </span>
                 </div>
               </Section>
 

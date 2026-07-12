@@ -26,6 +26,7 @@ export type { InputProps } from "./Input";
 export { Select } from "./Select";
 export type { SelectProps } from "./Select";
 export { Switch } from "./Switch";
+export { Checkbox } from "./Checkbox";
 export { SegmentedControl } from "./SegmentedControl";
 export type { SegmentOption } from "./SegmentedControl";
 export { Tabs } from "./Tabs";

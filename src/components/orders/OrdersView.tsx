@@ -7,6 +7,7 @@ import { Calendar, Check, Download, Search, X } from "lucide-react";
 import { useAdminOrders, type OrderRow } from "@/lib/api/hooks/useOrdersAdmin";
 import { OrdersExportButton } from "@/components/orders/OrdersExportButton";
 import { OrderRowMenu } from "@/components/orders/OrderRowMenu";
+import { OrderDrawer } from "@/components/orders/OrderDrawer";
 import { useAsyncExport } from "@/lib/api/hooks/reports";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { toast } from "@/lib/stores/toast";
@@ -145,6 +146,10 @@ export function OrdersView() {
   const to = sp.get("to") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
   const { pageSize, setPageSize } = usePageParams();
+  // Order whose detail drawer is open over the list. Driven by `?order=` so a reload
+  // re-opens the SAME drawer (instead of falling through to the full detail page);
+  // copying the link still yields the canonical `/admin/orders/<no>` full page.
+  const openOrderNo = sp.get("order");
 
   const sortParam = sp.get("sort") ?? "";
   const sortKey: SortKey =
@@ -241,6 +246,20 @@ export function OrdersView() {
     if (p > 1) next.set("page", String(p));
     else next.delete("page");
     router.push(`${pathname}?${next.toString()}`);
+  }
+
+  /** Open the detail drawer over the list (adds `?order=`; keeps all other filters). */
+  function openDrawer(orderNo: string) {
+    const next = new URLSearchParams(sp.toString());
+    next.set("order", orderNo);
+    router.push(`${pathname}?${next.toString()}`, { scroll: false });
+  }
+  /** Close the drawer — drop `?order=` and return to the list it was opened from. */
+  function closeDrawer() {
+    const next = new URLSearchParams(sp.toString());
+    next.delete("order");
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
   return (
@@ -460,7 +479,7 @@ export function OrdersView() {
                         "cursor-pointer",
                         selected.has(o.order_no) && "bg-accent-50/60",
                       )}
-                      onClick={() => router.push(`/admin/orders/${o.order_no}`)}
+                      onClick={() => openDrawer(o.order_no)}
                     >
                       <TD className="pr-0" onClick={(e) => e.stopPropagation()}>
                         <CheckBox
@@ -470,9 +489,17 @@ export function OrdersView() {
                         />
                       </TD>
                       <TD>
+                        {/* Opens the detail as a drawer over the list via ?order= (survives
+                            reload as a drawer). The href stays the canonical detail path so
+                            middle-click / "open in new tab" / copy-link still reach the full page. */}
                         <Link
                           href={`/admin/orders/${o.order_no}`}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openDrawer(o.order_no);
+                          }}
                           className="font-medium text-accent-700 hover:underline"
                         >
                           {o.order_no}
@@ -524,6 +551,12 @@ export function OrdersView() {
           </>
         )}
       </Card>
+
+      {/* Detail drawer over the list, opened/closed via the `?order=` param so a reload
+          re-opens it. Keyed by order no so switching rows remounts (fresh focus trap). */}
+      {openOrderNo && (
+        <OrderDrawer key={openOrderNo} orderNo={openOrderNo} onClose={closeDrawer} />
+      )}
     </div>
   );
 }

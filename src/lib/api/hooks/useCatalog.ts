@@ -17,6 +17,7 @@ import {
   familyDetailSchema,
   createFamilyResultSchema,
   productPageSchema,
+  bulkStatusResultSchema,
   type ProductPage,
   type CategoryNode,
   type CategoryDetail,
@@ -358,28 +359,25 @@ export function useProductStatus() {
   });
 }
 
-export function useDeleteProduct() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => api.delete<void>(`/admin/products/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
-  });
-}
-
-/** Per-item outcome of a bulk publish/archive (batch never aborts — some may fail validation). */
-export type BulkStatusResult = {
-  processed: number;
-  succeeded: number;
-  failed: number;
-  results: Array<{ id: string; ok: boolean; status?: string; code?: string; details?: string[] }>;
-};
-
-/** Bulk publish / archive selected products — PATCH /admin/products/bulk-status (FR-CAT-015/016). */
+/**
+ * Bulk publish / archive the selected rows (PATCH /admin/products/bulk-status,
+ * FR-CAT-015/016). Each item runs the same per-product validation as the single
+ * transition, so the batch never aborts — the result's `results[]` carries each
+ * id's ok/failure so the UI can show a per-item summary. Invalidates the list.
+ */
 export function useBulkProductStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: "published" | "archived" }) =>
-      api.patch<BulkStatusResult>("/admin/products/bulk-status", { ids, status }),
+      api.patch("/admin/products/bulk-status", { ids, status }, { schema: bulkStatusResultSchema }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+  });
+}
+
+export function useDeleteProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(`/admin/products/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
   });
 }

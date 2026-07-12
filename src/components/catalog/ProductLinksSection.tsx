@@ -1,10 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Plus, X } from "lucide-react";
+import { Search, Plus, X, ImageIcon } from "lucide-react";
 import { useProducts, useSetProductLinks } from "@/lib/api/hooks/useCatalog";
 import type { ProductLinkItem, ProductLinks } from "@/lib/api/schemas/catalog";
+import { ApiError } from "@/lib/api/errors";
 import { toast } from "@/lib/stores/toast";
+import { resolveMediaUrl } from "@/lib/media";
+
+/** A small square product thumbnail (or a placeholder when the product has no image). */
+function LinkThumb({ src, alt, size = 28 }: { src?: string | null; alt: string; size?: number }) {
+  const url = resolveMediaUrl(src);
+  return url ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt={alt}
+      style={{ width: size, height: size }}
+      className="shrink-0 rounded-md border border-border object-cover"
+    />
+  ) : (
+    <span
+      style={{ width: size, height: size }}
+      className="inline-flex shrink-0 items-center justify-center rounded-md border border-border bg-surface-subtle text-text-faint"
+      aria-hidden="true"
+    >
+      <ImageIcon className="h-3.5 w-3.5" />
+    </span>
+  );
+}
 
 /**
  * Product links (FR-CAT-019) — related / up-sell / cross-sell. Each group has a
@@ -57,8 +81,14 @@ export function ProductLinksSection({
       });
       setDirty(false);
       toast("Links saved.");
-    } catch {
-      toast("Couldn't save links. Try again.", "error");
+    } catch (err) {
+      // Surface the backend's actual reason (e.g. a linked product is draft/archived,
+      // or self-link) instead of a generic message — "save doesn't work" should say why.
+      const msg =
+        err instanceof ApiError && err.message && err.code !== "UNKNOWN"
+          ? `Couldn't save links — ${err.message}`
+          : "Couldn't save links. Try again.";
+      toast(msg, "error");
     }
   }
 
@@ -70,9 +100,10 @@ export function ProductLinksSection({
           <div className="mb-2.5 flex flex-wrap gap-2">
             {groups[g.key].length === 0 && <span className="text-xs text-text-muted">No {g.lower} products linked.</span>}
             {groups[g.key].map((p) => (
-              <span key={p.id} className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface py-1 pl-2 pr-1.5">
-                <span className="text-[12.5px] font-medium text-text-secondary">{p.name}</span>
-                <button type="button" aria-label={`Remove ${p.name}`} onClick={() => remove(g.key, p.id)} className="inline-flex h-5 w-5 items-center justify-center rounded-md text-text-muted hover:bg-surface-subtle">
+              <span key={p.id} className="inline-flex h-[34px] items-center gap-2 rounded-md border border-border bg-surface pl-1.5 pr-1.5">
+                <LinkThumb src={p.primary_image} alt={p.name} size={24} />
+                <span className="whitespace-nowrap text-[12.5px] font-medium text-text-secondary">{p.name}</span>
+                <button type="button" aria-label={`Remove ${p.name}`} onClick={() => remove(g.key, p.id)} className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-text-muted hover:bg-surface-subtle">
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </span>
@@ -90,7 +121,7 @@ export function ProductLinksSection({
           type="button"
           onClick={save}
           disabled={!dirty || setLinks.isPending}
-          className="inline-flex h-9 items-center rounded-lg bg-accent-600 px-4 text-sm font-semibold text-accent-fg shadow-xs hover:bg-accent-700 disabled:opacity-50"
+          className="inline-flex h-9 items-center rounded-md bg-accent-600 px-4 text-sm font-semibold text-accent-fg shadow-xs hover:bg-accent-700 disabled:opacity-50"
         >
           {setLinks.isPending ? "Saving…" : "Save links"}
         </button>
@@ -112,12 +143,14 @@ function LinkPicker({
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const { data } = useProducts(query.trim() ? { q: query.trim(), limit: 8 } : {});
+  // Fetch on focus even before typing (recent products), narrowing as the admin types —
+  // so the picker visibly works without requiring a search term first.
+  const { data, isLoading } = useProducts(query.trim() ? { q: query.trim(), limit: 8 } : { limit: 8 });
   const candidates = (data?.data ?? []).filter((p) => !excludeIds.has(p.id)).slice(0, 8);
 
   return (
     <div className="relative max-w-[420px]">
-      <div className="flex h-[38px] items-center gap-2.5 rounded-lg border border-border-strong bg-surface px-3">
+      <div className="flex h-[38px] items-center gap-2.5 rounded-md border border-border-strong bg-surface px-3">
         <Search className="h-4 w-4 shrink-0 text-text-faint" aria-hidden="true" />
         <input
           type="text"
@@ -130,9 +163,11 @@ function LinkPicker({
           className="min-w-0 flex-1 bg-transparent text-sm text-text outline-none"
         />
       </div>
-      {open && query.trim() && (
+      {open && (
         <div role="listbox" className="absolute left-0 right-0 top-[42px] z-20 max-h-[212px] overflow-y-auto rounded-lg border border-border bg-surface p-1.5 shadow-lg">
-          {candidates.length === 0 ? (
+          {isLoading ? (
+            <div className="p-3 text-center text-[12.5px] text-text-muted">Loading products…</div>
+          ) : candidates.length === 0 ? (
             <div className="p-3 text-center text-[12.5px] text-text-muted">No matching products.</div>
           ) : (
             candidates.map((p) => (
@@ -143,8 +178,9 @@ function LinkPicker({
                 aria-selected={false}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { onPick({ id: p.id, name: p.name, sku: p.sku ?? null, primary_image: p.primary_image ?? null }); setQuery(""); setOpen(false); }}
-                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left hover:bg-surface-subtle"
+                className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-surface-subtle"
               >
+                <LinkThumb src={p.primary_image} alt={p.name} size={28} />
                 <span className="min-w-0 flex-1 truncate text-sm text-text-secondary">{p.name}</span>
                 <Plus className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
               </button>

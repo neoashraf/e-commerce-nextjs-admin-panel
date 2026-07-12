@@ -33,6 +33,7 @@ import {
   TH,
   THead,
   TR,
+  type SortDir,
 } from "@/components/ui";
 import { CustomerExportModal } from "./CustomerExportModal";
 import { CustomerBulkTagBar } from "./CustomerBulkTagBar";
@@ -56,6 +57,18 @@ const STATUS_LABEL: Record<string, string> = {
   locked: "Locked",
   suspended: "Suspended",
   deleted: "Deleted",
+};
+
+/** Client-side sort key (GET /admin/customers has no sort param — we sort the
+ * current page only; cross-page true sort is a BE gap). `null` = server order. */
+type SortKey = "name" | "phone" | "email" | "status" | "orders" | "spent" | "last_order";
+
+/** Stable order for the status column when sorted (active → locked → suspended → deleted). */
+const STATUS_RANK: Record<string, number> = {
+  active: 0,
+  locked: 1,
+  suspended: 2,
+  deleted: 3,
 };
 
 function isoDaysAgo(n: number): string {
@@ -137,6 +150,66 @@ export function CustomersView() {
   const [exportOpen, setExportOpen] = useState(false);
   const rows = useMemo(() => data?.data ?? [], [data]);
   const total = data?.meta.total ?? 0;
+
+  // ── Column sort (client-side, current page). The list endpoint has no sort
+  //    param yet — BE gap noted; `null` key keeps the server order. ──
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey || !sortDir) return rows;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      let av: number | string;
+      let bv: number | string;
+      switch (sortKey) {
+        case "orders":
+          av = a.order_count ?? 0;
+          bv = b.order_count ?? 0;
+          break;
+        case "spent":
+          av = Number(a.total_spent ?? 0);
+          bv = Number(b.total_spent ?? 0);
+          break;
+        case "last_order":
+          // Never-ordered rows sort to the bottom regardless of direction.
+          av = a.last_order_at ? Date.parse(a.last_order_at) : -Infinity;
+          bv = b.last_order_at ? Date.parse(b.last_order_at) : -Infinity;
+          break;
+        case "status":
+          av = STATUS_RANK[a.status] ?? 99;
+          bv = STATUS_RANK[b.status] ?? 99;
+          break;
+        case "phone":
+          av = (a.phone ?? "").toLowerCase();
+          bv = (b.phone ?? "").toLowerCase();
+          break;
+        case "email":
+          av = (a.email ?? "").toLowerCase();
+          bv = (b.email ?? "").toLowerCase();
+          break;
+        default:
+          av = (a.name ?? a.phone ?? a.email ?? "").toLowerCase();
+          bv = (b.name ?? b.phone ?? b.email ?? "").toLowerCase();
+      }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  }, [rows, sortKey, sortDir]);
+
+  /** Toggle a column's sort: first click defaults to a sensible direction
+   * (numeric/date → desc, text → asc), then flips; a new column resets it. */
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      const numeric = key === "orders" || key === "spent" || key === "last_order";
+      setSortKey(key);
+      setSortDir(numeric ? "desc" : "asc");
+    }
+  }
+  const sortOf = (key: SortKey): SortDir => (sortKey === key ? sortDir : null);
 
   // ── Row selection + bulk tag action (FR-CUST-031). Guests aren't selectable
   //    (no account). Tag assignment is gated on `customers.tag.manage`. ──
@@ -445,21 +518,21 @@ export function CustomersView() {
                       />
                     </TH>
                   )}
-                  <TH>Name</TH>
-                  <TH>Phone</TH>
-                  <TH>Email</TH>
-                  <TH>Status</TH>
+                  <TH sort={sortOf("name")} onSort={() => toggleSort("name")}>Name</TH>
+                  <TH sort={sortOf("phone")} onSort={() => toggleSort("phone")}>Phone</TH>
+                  <TH sort={sortOf("email")} onSort={() => toggleSort("email")}>Email</TH>
+                  <TH sort={sortOf("status")} onSort={() => toggleSort("status")}>Status</TH>
                   <TH>Tags</TH>
-                  <TH numeric>Orders</TH>
-                  <TH numeric>Total spent</TH>
-                  <TH>Last order</TH>
+                  <TH numeric sort={sortOf("orders")} onSort={() => toggleSort("orders")}>Orders</TH>
+                  <TH numeric sort={sortOf("spent")} onSort={() => toggleSort("spent")}>Total spent</TH>
+                  <TH sort={sortOf("last_order")} onSort={() => toggleSort("last_order")}>Last order</TH>
                   <TH className="w-14">
                     <span className="sr-only">Actions</span>
                   </TH>
                 </TR>
               </THead>
               <TBody>
-                {rows.map((c, i) => {
+                {sortedRows.map((c, i) => {
                   const name = c.name ?? c.phone ?? c.email ?? "Guest";
                   const isGuest = !!c.is_guest;
                   const orders = c.order_count ?? 0;

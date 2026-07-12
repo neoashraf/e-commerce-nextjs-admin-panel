@@ -329,7 +329,7 @@ export function ProductImageSection({
 
   // ── Shared classes ───────────────────────────────────────────────────────────
   const field =
-    "h-[36px] w-full rounded-lg border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600";
+    "h-[36px] w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600";
   const tileBtn =
     "inline-flex h-[26px] w-[26px] items-center justify-center rounded-md bg-white/90 text-text-secondary shadow-xs transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40";
 
@@ -337,7 +337,7 @@ export function ProductImageSection({
   return (
     <Wrapper
       className={
-        embedded ? "flex flex-col gap-[18px]" : "flex flex-col gap-[18px] rounded-xl border border-border bg-surface p-5"
+        embedded ? "flex flex-col gap-[18px]" : "flex flex-col gap-[18px] rounded-lg border border-border bg-surface p-5"
       }
     >
       {!embedded && (
@@ -362,11 +362,11 @@ export function ProductImageSection({
         onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); addToPending(e.dataTransfer.files); }}
         className={
-          "flex cursor-pointer flex-col items-center gap-2.5 rounded-xl border-[1.5px] border-dashed px-5 py-[26px] text-center transition-colors " +
+          "flex cursor-pointer flex-col items-center gap-2.5 rounded-lg border-[1.5px] border-dashed px-5 py-[26px] text-center transition-colors " +
           (dragOver ? "border-accent-600 bg-accent-50" : "border-border-strong bg-surface hover:bg-surface-subtle")
         }
       >
-        <span className="flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-accent-50 text-accent-600">
+        <span className="flex h-[42px] w-[42px] items-center justify-center rounded-lg bg-accent-50 text-accent-600">
           <Upload className="h-5 w-5" aria-hidden="true" />
         </span>
         <div className="text-[13.5px] font-semibold text-text-secondary">
@@ -385,16 +385,16 @@ export function ProductImageSection({
 
       {/* ── B. PENDING UPLOAD TRAY ─────────────────────────────────────────────── */}
       {pending.length > 0 && (
-        <div className="rounded-xl border border-accent-100 bg-accent-50 p-3.5">
+        <div className="rounded-lg border border-accent-100 bg-accent-50 p-3.5">
           <div className="mb-2.5 flex items-center justify-between gap-2.5">
             <span className="text-[13px] font-bold text-accent-700">Pending upload · {pending.length}</span>
             <span className="text-[11.5px] text-text-secondary">Alt text is required for every image.</span>
           </div>
           <div className="flex flex-col gap-2.5">
             {pending.map((p) => (
-              <div key={p.id} className="flex items-center gap-2.5 rounded-[10px] border border-border bg-surface px-2.5 py-2.5">
+              <div key={p.id} className="flex items-center gap-2.5 rounded-md border border-border bg-surface px-2.5 py-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.preview} alt="" className="h-[42px] w-[42px] shrink-0 rounded-lg border border-border object-cover" />
+                <img src={p.preview} alt="" className="h-[42px] w-[42px] shrink-0 rounded-md border border-border object-cover" />
                 <input
                   type="text"
                   aria-label="Alt text for pending image"
@@ -403,7 +403,7 @@ export function ProductImageSection({
                   onChange={(e) => setPendingAlt(p.id, e.target.value)}
                   maxLength={160}
                   className={
-                    "h-[34px] min-w-0 flex-1 rounded-lg border bg-surface px-2.5 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
+                    "h-[34px] min-w-0 flex-1 rounded-md border bg-surface px-2.5 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
                     (p.alt.trim() ? "border-border-strong" : "border-warning/60")
                   }
                 />
@@ -412,7 +412,7 @@ export function ProductImageSection({
                   onClick={() => setPendingPrimaryId((cur) => (cur === p.id ? null : p.id))}
                   aria-pressed={pendingPrimaryId === p.id}
                   className={
-                    "inline-flex h-[34px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-semibold transition " +
+                    "inline-flex h-[34px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-xs font-semibold transition " +
                     (pendingPrimaryId === p.id
                       ? "border-accent-600 bg-accent-600 text-accent-fg"
                       : "border-border-strong bg-surface text-text-secondary hover:bg-surface-subtle")
@@ -432,7 +432,7 @@ export function ProductImageSection({
                   type="button"
                   onClick={() => removePending(p.id)}
                   aria-label="Remove pending image"
-                  className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface text-error hover:bg-error-50"
+                  className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md border border-border-strong bg-surface text-error hover:bg-error-50"
                 >
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -444,7 +444,7 @@ export function ProductImageSection({
               type="button"
               onClick={onUploadPending}
               disabled={upload.isPending}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent-600 px-[15px] text-[13px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-[15px] text-[13px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50"
             >
               <UploadCloud className="h-4 w-4" aria-hidden="true" />
               {upload.isPending
@@ -457,7 +457,7 @@ export function ProductImageSection({
               type="button"
               onClick={discardPending}
               disabled={upload.isPending}
-              className="h-9 rounded-lg px-3 text-[13px] font-semibold text-text-secondary hover:bg-surface-subtle disabled:opacity-50"
+              className="h-9 rounded-md px-3 text-[13px] font-semibold text-text-secondary hover:bg-surface-subtle disabled:opacity-50"
             >
               Discard
             </button>
@@ -466,7 +466,7 @@ export function ProductImageSection({
       )}
 
       {error && (
-        <p role="alert" className="rounded-lg bg-error-50 px-3 py-2 text-sm text-error">{error}</p>
+        <p role="alert" className="rounded-md bg-error-50 px-3 py-2 text-sm text-error">{error}</p>
       )}
 
       {/* ── C. GALLERY ─────────────────────────────────────────────────────────── */}
@@ -484,7 +484,7 @@ export function ProductImageSection({
         </div>
 
         {images.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface-subtle px-5 py-9 text-center">
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface-subtle px-5 py-9 text-center">
             <span className="mb-3 flex h-[42px] w-[42px] items-center justify-center rounded-full bg-surface text-text-muted">
               <ImageOff className="h-5 w-5" aria-hidden="true" />
             </span>
@@ -511,7 +511,7 @@ export function ProductImageSection({
                   onKeyDown={(e) => { if (e.key === "Enter") selectTile(img); }}
                   aria-label={`Image: ${img.alt_text}`}
                   className={
-                    "group relative aspect-square cursor-pointer overflow-hidden rounded-xl border-2 bg-surface-subtle transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
+                    "group relative aspect-square cursor-pointer overflow-hidden rounded-lg border-2 bg-surface-subtle transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
                     (selectedId === img.id ? "border-accent-600" : "border-border hover:border-accent-500")
                   }
                 >
@@ -575,10 +575,10 @@ export function ProductImageSection({
                     >
                       <span className="text-center text-[13px] font-semibold text-white">Delete this image?</span>
                       <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => onConfirmDelete(img)} disabled={remove.isPending} className="h-8 rounded-lg bg-error px-3 text-[12.5px] font-semibold text-white hover:bg-error/90 disabled:opacity-50">
+                        <button type="button" onClick={() => onConfirmDelete(img)} disabled={remove.isPending} className="h-8 rounded-md bg-error px-3 text-[12.5px] font-semibold text-white hover:bg-error/90 disabled:opacity-50">
                           {remove.isPending ? "Deleting…" : "Delete"}
                         </button>
-                        <button type="button" onClick={() => setConfirmingDeleteId(null)} disabled={remove.isPending} className="h-8 rounded-lg bg-white/90 px-3 text-[12.5px] font-semibold text-text-secondary hover:bg-white disabled:opacity-50">
+                        <button type="button" onClick={() => setConfirmingDeleteId(null)} disabled={remove.isPending} className="h-8 rounded-md bg-white/90 px-3 text-[12.5px] font-semibold text-text-secondary hover:bg-white disabled:opacity-50">
                           Cancel
                         </button>
                       </div>
@@ -593,7 +593,7 @@ export function ProductImageSection({
 
       {/* ── D. INLINE DETAIL PANEL ─────────────────────────────────────────────── */}
       {selectedImage && (
-        <div className="flex flex-wrap gap-4 rounded-xl border-[1.5px] border-accent-600 p-4">
+        <div className="flex flex-wrap gap-4 rounded-lg border-[1.5px] border-accent-600 p-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={pickRendition(selectedImage.renditions, selectedImage.url)}
@@ -647,15 +647,15 @@ export function ProductImageSection({
               )}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2.5">
-              <button type="button" onClick={onSaveDetail} disabled={busy} className="inline-flex h-[34px] items-center rounded-lg bg-accent-600 px-3.5 text-[12.5px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50">
+              <button type="button" onClick={onSaveDetail} disabled={busy} className="inline-flex h-[34px] items-center rounded-md bg-accent-600 px-3.5 text-[12.5px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50">
                 {updateImage.isPending ? "Saving…" : "Save"}
               </button>
               {!selectedImage.is_primary && (
-                <button type="button" onClick={() => onMakePrimary(selectedImage)} disabled={busy} className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-3 text-[12.5px] font-semibold text-text hover:bg-surface-subtle disabled:opacity-50">
+                <button type="button" onClick={() => onMakePrimary(selectedImage)} disabled={busy} className="inline-flex h-[34px] items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-[12.5px] font-semibold text-text hover:bg-surface-subtle disabled:opacity-50">
                   <Star className="h-3.5 w-3.5" aria-hidden="true" />Set primary
                 </button>
               )}
-              <button type="button" onClick={() => onConfirmDelete(selectedImage)} disabled={busy} className="ml-auto inline-flex h-[34px] items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error hover:bg-error-50 disabled:opacity-50">
+              <button type="button" onClick={() => onConfirmDelete(selectedImage)} disabled={busy} className="ml-auto inline-flex h-[34px] items-center gap-1.5 rounded-md px-3 text-[12.5px] font-semibold text-error hover:bg-error-50 disabled:opacity-50">
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Delete
               </button>
             </div>
@@ -679,14 +679,14 @@ export function ProductImageSection({
           <div className="mb-3 flex flex-col gap-2.5">
             {videos.map((v) => (
               <div key={v.id} className="flex items-center gap-2.5">
-                <span className="inline-flex h-9 shrink-0 items-center rounded-lg border border-border-strong bg-surface-subtle px-2.5 text-xs font-semibold text-text-secondary">
+                <span className="inline-flex h-9 shrink-0 items-center rounded-md border border-border-strong bg-surface-subtle px-2.5 text-xs font-semibold text-text-secondary">
                   {v.source === "upload" ? "Upload" : "URL"}
                 </span>
                 <a
                   href={v.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="min-w-0 flex-1 truncate rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-accent-700 hover:underline"
+                  className="min-w-0 flex-1 truncate rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-accent-700 hover:underline"
                 >
                   {v.url}
                 </a>
@@ -695,7 +695,7 @@ export function ProductImageSection({
                   onClick={() => onRemoveVideo(v.id)}
                   disabled={deleteVideo.isPending}
                   aria-label="Remove video"
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface text-error hover:bg-error-50 disabled:opacity-50"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border-strong bg-surface text-error hover:bg-error-50 disabled:opacity-50"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -710,7 +710,7 @@ export function ProductImageSection({
             aria-label="Video source"
             value={videoSource}
             onChange={(e) => setVideoSource(e.target.value as "url" | "upload")}
-            className="h-9 w-[104px] shrink-0 cursor-pointer rounded-lg border border-border-strong bg-surface px-2.5 text-sm font-medium text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+            className="h-9 w-[104px] shrink-0 cursor-pointer rounded-md border border-border-strong bg-surface px-2.5 text-sm font-medium text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
           >
             <option value="url">URL</option>
             <option value="upload">Upload</option>
@@ -723,7 +723,7 @@ export function ProductImageSection({
             onChange={(e) => { setVideoUrl(e.target.value); setVideoError(null); }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onAddVideo(); } }}
             className={
-              "h-9 min-w-0 flex-1 rounded-lg border bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
+              "h-9 min-w-0 flex-1 rounded-md border bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 " +
               (videoError ? "border-error" : "border-border-strong")
             }
           />
@@ -731,7 +731,7 @@ export function ProductImageSection({
             type="button"
             onClick={onAddVideo}
             disabled={addVideo.isPending}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-3 text-[12.5px] font-semibold text-text hover:bg-surface-subtle disabled:opacity-50"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-[12.5px] font-semibold text-text hover:bg-surface-subtle disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />{addVideo.isPending ? "Adding…" : "Add video"}
           </button>

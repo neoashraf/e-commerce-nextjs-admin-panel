@@ -74,7 +74,10 @@ export function TH({
         sort === "asc" ? "ascending" : sort === "desc" ? "descending" : undefined
       }
       className={cn(
-        "px-4 py-2.5 text-eyebrow uppercase tracking-wide text-text-muted",
+        // `text-eyebrow` already carries the header letter-spacing; don't add
+        // `tracking-wide` on top or it fights the token and sortable (button)
+        // vs. plain (text) headers end up spaced differently in the same row.
+        "px-4 py-2.5 text-eyebrow uppercase text-text-muted",
         numeric ? "text-right" : "text-left",
         className,
       )}

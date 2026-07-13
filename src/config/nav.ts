@@ -111,6 +111,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Delivery", href: "/admin/settings/delivery", permission: "cart.settings.manage", icon: Truck },
       { label: "Payments", href: "/admin/settings/payments", permission: "payments.settings.manage", icon: CreditCard },
       { label: "Notifications", href: "/admin/settings/notifications", permission: "notifications.settings.manage", icon: BellRing },
+      { label: "Two-factor", href: "/admin/settings/mfa", permission: "settings.setting.read", icon: Shield },
     ],
   },
 ];

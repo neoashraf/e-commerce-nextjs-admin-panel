@@ -1,9 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Calendar, Check, Download, Search, UserRound, Users } from "lucide-react";
+import {
+  Calendar,
+  Check,
+  Download,
+  Filter as FilterIcon,
+  Search,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
 import {
   useCustomersPage,
   useCustomerTags,
@@ -134,6 +143,32 @@ export function CustomersView() {
   const tag = sp.get("tag") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
   const { pageSize, setPageSize } = usePageParams();
+
+  // Staged filter values (design: explicit Filter/Clear). The status/tag/activity/date
+  // /include-guests controls edit LOCAL state and only hit the URL when "Filter" is
+  // clicked, so the list doesn't refetch on every change. Search (Enter) stays instant.
+  // We seed from the URL and re-sync whenever the applied params change (Filter/Clear/
+  // back-forward), so staged === applied right after an apply and the hint clears.
+  const [draft, setDraft] = useState({
+    status,
+    tag,
+    activity,
+    registeredFrom,
+    registeredTo,
+    includeGuests,
+  });
+  useEffect(() => {
+    setDraft({ status, tag, activity, registeredFrom, registeredTo, includeGuests });
+  }, [status, tag, activity, registeredFrom, registeredTo, includeGuests]);
+
+  /** Any staged control differs from what's applied in the URL → enables Filter. */
+  const isDirty =
+    draft.status !== status ||
+    draft.tag !== tag ||
+    draft.activity !== activity ||
+    draft.registeredFrom !== registeredFrom ||
+    draft.registeredTo !== registeredTo ||
+    draft.includeGuests !== includeGuests;
 
   const { data, isLoading, isError, refetch } = useCustomersPage({
     q: q || undefined,
@@ -284,6 +319,55 @@ export function CustomersView() {
     router.push(`${pathname}?${next.toString()}`);
   }
 
+  /**
+   * Apply the staged controls in one push (design: "Filter" button). Search (`q`) and
+   * the open detail route are preserved; page resets to 1.
+   */
+  function applyFilters() {
+    const next = new URLSearchParams(sp.toString());
+    const set = (key: string, value: string) => {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    };
+    set("status", draft.status);
+    set("tag", draft.tag);
+    set("activity", draft.activity);
+    set("registered_from", draft.registeredFrom);
+    set("registered_to", draft.registeredTo);
+    set("include_guests", draft.includeGuests ? "1" : "");
+    next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
+  /**
+   * Clear every filter — the staged controls AND the instant search (`q`). Page-size is
+   * kept; the effect above re-seeds the draft from the now-empty URL so the toolbar
+   * resets in step.
+   */
+  function clearFilters() {
+    setDraft({
+      status: "",
+      tag: "",
+      activity: "",
+      registeredFrom: "",
+      registeredTo: "",
+      includeGuests: false,
+    });
+    const next = new URLSearchParams(sp.toString());
+    [
+      "status",
+      "tag",
+      "activity",
+      "registered_from",
+      "registered_to",
+      "include_guests",
+      "q",
+      "page",
+    ].forEach((key) => next.delete(key));
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
+
   function goPage(p: number) {
     const next = new URLSearchParams(sp.toString());
     if (p > 1) next.set("page", String(p));
@@ -317,6 +401,16 @@ export function CustomersView() {
 
   const resultCount = total;
   const hasFilters = !!(q || status || activity || registeredFrom || registeredTo);
+  /** Any filter active — staged OR applied (incl. instant search) — enables Clear. */
+  const hasActiveFilter = !!(
+    q ||
+    draft.status ||
+    draft.tag ||
+    draft.activity ||
+    draft.registeredFrom ||
+    draft.registeredTo ||
+    draft.includeGuests
+  );
 
   if (ready && !can(CUSTOMERS_READ_PERMISSION)) {
     return (
@@ -357,6 +451,10 @@ export function CustomersView() {
       <div className="flex flex-wrap items-center gap-2.5">
         <div className="min-w-[240px] max-w-[320px] flex-1">
           <Input
+            // Uncontrolled (defaultValue) so typing doesn't refetch on each keystroke;
+            // key=q remounts it when the applied search changes (e.g. Clear) so the box
+            // empties in step with the URL instead of keeping a stale value.
+            key={q}
             type="search"
             aria-label="Search customers"
             placeholder="Search name, phone, or email…"
@@ -368,11 +466,13 @@ export function CustomersView() {
           />
         </div>
 
+        {/* Status / Tag / Activity / date-range / include-guests are STAGED — they edit
+            the local draft and only take effect when "Filter" is clicked. */}
         <div className="w-36">
           <Select
             aria-label="Filter by status"
-            value={status}
-            onChange={(e) => setParam("status", e.target.value)}
+            value={draft.status}
+            onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}
           >
             <option value="">All status</option>
             <option value="active">Active</option>
@@ -385,8 +485,8 @@ export function CustomersView() {
         <div className="w-36">
           <Select
             aria-label="Filter by tag"
-            value={tag}
-            onChange={(e) => setParam("tag", e.target.value)}
+            value={draft.tag}
+            onChange={(e) => setDraft((d) => ({ ...d, tag: e.target.value }))}
           >
             <option value="">All tags</option>
             {CUSTOMER_TAG_OPTIONS.map((t) => (
@@ -400,8 +500,8 @@ export function CustomersView() {
         <div className="w-44">
           <Select
             aria-label="Filter by order activity"
-            value={activity}
-            onChange={(e) => setParam("activity", e.target.value)}
+            value={draft.activity}
+            onChange={(e) => setDraft((d) => ({ ...d, activity: e.target.value }))}
           >
             <option value="">Any activity</option>
             <option value="has_orders">Has orders</option>
@@ -413,15 +513,15 @@ export function CustomersView() {
         </div>
 
         {/* Registration date-range — one bordered pill wrapping two native date
-            pickers with a calendar icon + en-dash; commits on change (URL-reflected). */}
+            pickers with a calendar icon + en-dash; staged into the draft. */}
         <div className="flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5">
           <Calendar className="h-[15px] w-[15px] flex-shrink-0 text-text-faint" aria-hidden="true" />
           <input
             type="date"
             aria-label="Registered from"
-            value={registeredFrom}
-            max={registeredTo || undefined}
-            onChange={(e) => setParam("registered_from", e.target.value)}
+            value={draft.registeredFrom}
+            max={draft.registeredTo || undefined}
+            onChange={(e) => setDraft((d) => ({ ...d, registeredFrom: e.target.value }))}
             className="w-[120px] border-0 bg-transparent p-0 text-[13px] tabular-nums text-text outline-none focus:outline-none focus-visible:outline-none"
           />
           <span className="text-[13px] text-text-faint" aria-hidden="true">
@@ -430,24 +530,24 @@ export function CustomersView() {
           <input
             type="date"
             aria-label="Registered to"
-            value={registeredTo}
-            min={registeredFrom || undefined}
-            onChange={(e) => setParam("registered_to", e.target.value)}
+            value={draft.registeredTo}
+            min={draft.registeredFrom || undefined}
+            onChange={(e) => setDraft((d) => ({ ...d, registeredTo: e.target.value }))}
             className="w-[120px] border-0 bg-transparent p-0 text-[13px] tabular-nums text-text outline-none focus:outline-none focus-visible:outline-none"
           />
         </div>
 
-        {/* Include-guests toggle */}
+        {/* Include-guests toggle — staged into the draft. */}
         <button
           type="button"
           role="switch"
-          aria-checked={includeGuests}
+          aria-checked={draft.includeGuests}
           aria-label="Include guest contacts"
-          onClick={() => setParam("include_guests", includeGuests ? "" : "1")}
+          onClick={() => setDraft((d) => ({ ...d, includeGuests: !d.includeGuests }))}
           className={cn(
             "inline-flex h-9 items-center gap-2.5 rounded-md border px-3 text-[13px] font-semibold transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
-            includeGuests
+            draft.includeGuests
               ? "border-accent-600 bg-accent-50 text-accent-700"
               : "border-border-strong bg-surface text-text-secondary hover:bg-surface-subtle",
           )}
@@ -455,18 +555,40 @@ export function CustomersView() {
           <span
             className={cn(
               "relative h-[18px] w-[30px] flex-shrink-0 rounded-full transition-colors",
-              includeGuests ? "bg-accent-600" : "bg-border-strong",
+              draft.includeGuests ? "bg-accent-600" : "bg-border-strong",
             )}
           >
             <span
               className={cn(
                 "absolute top-0.5 h-[14px] w-[14px] rounded-full bg-surface shadow-xs transition-all",
-                includeGuests ? "left-[14px]" : "left-0.5",
+                draft.includeGuests ? "left-[14px]" : "left-0.5",
               )}
             />
           </span>
           Include guests
         </button>
+
+        {/* Filter / Clear — apply the staged controls in one push, or reset every
+            filter (incl. the instant search). Filter is disabled until a staged value
+            differs from what's applied; Clear until some filter is active. */}
+        <Button
+          variant="primary"
+          size="md"
+          leadingIcon={<FilterIcon className="h-4 w-4" aria-hidden="true" />}
+          onClick={applyFilters}
+          disabled={!isDirty}
+        >
+          Filter
+        </Button>
+        <Button
+          variant="secondary"
+          size="md"
+          leadingIcon={<X className="h-4 w-4" aria-hidden="true" />}
+          onClick={clearFilters}
+          disabled={!hasActiveFilter}
+        >
+          Clear
+        </Button>
 
         <span
           aria-live="polite"

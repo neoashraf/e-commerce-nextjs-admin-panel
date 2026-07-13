@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Calendar, Check, Download, Search, X } from "lucide-react";
+import { Calendar, Check, Download, Filter as FilterIcon, Search, X } from "lucide-react";
 import { useAdminOrders, type OrderRow } from "@/lib/api/hooks/useOrdersAdmin";
 import { OrdersExportButton } from "@/components/orders/OrdersExportButton";
 import { OrderRowMenu } from "@/components/orders/OrderRowMenu";
@@ -14,6 +14,7 @@ import { toast } from "@/lib/stores/toast";
 import { formatBDT, formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import {
+  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -156,6 +157,40 @@ export function OrdersView() {
     sortParam in SORT_ACCESSORS ? (sortParam as SortKey) : DEFAULT_SORT;
   const sortDir: SortDir = sp.get("dir") === "asc" ? "asc" : DEFAULT_DIR;
 
+  // Staged filter values (design: explicit Filter/Clear). The status/payment/date
+  // dropdowns edit LOCAL state and only hit the URL when "Filter" is clicked, so the
+  // list doesn't refetch on every keystroke. Search (Enter) and the status Tabs stay
+  // instant — they're their own affordances. We seed from the URL and re-sync whenever
+  // the applied params change (Filter/Clear/tab/back-forward), so staged === applied
+  // right after an apply and the "unapplied changes" hint clears.
+  const [draft, setDraft] = useState({
+    status,
+    paymentState,
+    paymentMethod,
+    from,
+    to,
+  });
+  useEffect(() => {
+    setDraft({ status, paymentState, paymentMethod, from, to });
+  }, [status, paymentState, paymentMethod, from, to]);
+
+  /** Any staged dropdown/date filter differs from what's applied in the URL. */
+  const isDirty =
+    draft.status !== status ||
+    draft.paymentState !== paymentState ||
+    draft.paymentMethod !== paymentMethod ||
+    draft.from !== from ||
+    draft.to !== to;
+  /** Any filter (staged or the instant search) is active — enables Clear. */
+  const hasActiveFilter = Boolean(
+    q ||
+      draft.status ||
+      draft.paymentState ||
+      draft.paymentMethod ||
+      draft.from ||
+      draft.to,
+  );
+
   const { data, isLoading, isError, refetch } = useAdminOrders({
     status: status || undefined,
     payment_state: paymentState || undefined,
@@ -241,6 +276,40 @@ export function OrdersView() {
     router.push(`${pathname}?${next.toString()}`);
   }
 
+  /**
+   * Apply the staged dropdown/date filters in one push (design: "Filter" button).
+   * Search (`q`), sort and the open drawer are preserved; page resets to 1.
+   */
+  function applyFilters() {
+    const next = new URLSearchParams(sp.toString());
+    const set = (key: string, value: string) => {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    };
+    set("status", draft.status);
+    set("payment_state", draft.paymentState);
+    set("payment_method", draft.paymentMethod);
+    set("from", draft.from);
+    set("to", draft.to);
+    next.delete("page");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
+  /**
+   * Clear every filter — the staged dropdowns/dates AND the instant search (`q`).
+   * Sort, page-size and the open drawer are kept; the effect above re-seeds the
+   * draft from the now-empty URL so the toolbar resets in step.
+   */
+  function clearFilters() {
+    setDraft({ status: "", paymentState: "", paymentMethod: "", from: "", to: "" });
+    const next = new URLSearchParams(sp.toString());
+    ["status", "payment_state", "payment_method", "from", "to", "q", "page"].forEach(
+      (key) => next.delete(key),
+    );
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
+
   function goPage(p: number) {
     const next = new URLSearchParams(sp.toString());
     if (p > 1) next.set("page", String(p));
@@ -299,6 +368,10 @@ export function OrdersView() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="w-full sm:w-64">
           <Input
+            // Uncontrolled (defaultValue) so typing doesn't refetch on each keystroke;
+            // key=q remounts it when the applied search changes (e.g. Clear) so the box
+            // empties in step with the URL instead of keeping a stale value.
+            key={q}
             leadingIcon={<Search className="h-4 w-4" />}
             placeholder="Search order no, customer name or phone…"
             aria-label="Search orders"
@@ -308,13 +381,14 @@ export function OrdersView() {
             }
           />
         </div>
-        {/* Status filter (design D) — shares the `status` URL param with the tabs
-            above, so the two stay in sync (selecting here moves the active tab). */}
+        {/* Status filter (design D) — staged: edits local draft and only takes effect
+            when "Filter" is clicked. Shows the applied `status` until then, so it stays
+            in sync with the tabs above (which apply the status param instantly). */}
         <div className="w-40">
           <Select
             aria-label="Filter by status"
-            value={status}
-            onChange={(e) => setFilter("status", e.target.value)}
+            value={draft.status}
+            onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}
           >
             <option value="">All status</option>
             <option value="pending_payment">Pending payment</option>
@@ -329,8 +403,8 @@ export function OrdersView() {
         <div className="w-40">
           <Select
             aria-label="Filter by payment state"
-            value={paymentState}
-            onChange={(e) => setFilter("payment_state", e.target.value)}
+            value={draft.paymentState}
+            onChange={(e) => setDraft((d) => ({ ...d, paymentState: e.target.value }))}
           >
             <option value="">All payments</option>
             <option value="paid">Paid</option>
@@ -343,8 +417,8 @@ export function OrdersView() {
         <div className="w-40">
           <Select
             aria-label="Filter by payment method"
-            value={paymentMethod}
-            onChange={(e) => setFilter("payment_method", e.target.value)}
+            value={draft.paymentMethod}
+            onChange={(e) => setDraft((d) => ({ ...d, paymentMethod: e.target.value }))}
           >
             <option value="">All methods</option>
             <option value="bkash">bKash</option>
@@ -354,15 +428,15 @@ export function OrdersView() {
         </div>
 
         {/* Date range — one bordered pill (design D) wrapping the two native date
-            pickers with a calendar icon + en-dash; same from/to URL params. */}
+            pickers with a calendar icon + en-dash; staged into the draft. */}
         <div className="flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3">
           <Calendar className="h-4 w-4 shrink-0 text-text-faint" aria-hidden="true" />
           <input
             type="date"
             aria-label="Placed from"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => setFilter("from", e.target.value)}
+            value={draft.from}
+            max={draft.to || undefined}
+            onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
             className="w-[120px] border-0 bg-transparent p-0 text-sm tabular-nums text-text outline-none focus:outline-none focus-visible:outline-none"
           />
           <span className="text-sm text-text-faint" aria-hidden="true">
@@ -371,12 +445,34 @@ export function OrdersView() {
           <input
             type="date"
             aria-label="Placed to"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => setFilter("to", e.target.value)}
+            value={draft.to}
+            min={draft.from || undefined}
+            onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
             className="w-[120px] border-0 bg-transparent p-0 text-sm tabular-nums text-text outline-none focus:outline-none focus-visible:outline-none"
           />
         </div>
+
+        {/* Filter / Clear (design D) — apply the staged dropdowns/dates in one push, or
+            reset every filter (incl. the instant search). Filter is disabled until a
+            staged value differs from what's applied; Clear until some filter is active. */}
+        <Button
+          variant="primary"
+          size="md"
+          leadingIcon={<FilterIcon className="h-4 w-4" aria-hidden="true" />}
+          onClick={applyFilters}
+          disabled={!isDirty}
+        >
+          Filter
+        </Button>
+        <Button
+          variant="secondary"
+          size="md"
+          leadingIcon={<X className="h-4 w-4" aria-hidden="true" />}
+          onClick={clearFilters}
+          disabled={!hasActiveFilter}
+        >
+          Clear
+        </Button>
 
         {/* Result count for the current filter (meta.total) — mirrors the design's
             "{N} orders" readout; aria-live so it's announced as filters change. */}

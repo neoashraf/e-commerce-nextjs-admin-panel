@@ -1,19 +1,9 @@
 /**
- * Orders segment layout — hosts the list (children) plus a parallel `@drawer`
- * slot that the intercepting route fills with the order-detail drawer over the
- * list (AD3). On a normal navigation the slot stays empty (its default.tsx).
+ * Orders segment layout. The order-detail drawer is now driven by the list's
+ * `?order=<orderNo>` query param (rendered inside OrdersView), so it survives a
+ * reload as a drawer; the canonical `/admin/orders/[orderNo]` route remains the
+ * full-page detail used by copied links and deep-links from other screens.
  */
-export default function OrdersLayout({
-  children,
-  drawer,
-}: {
-  children: React.ReactNode;
-  drawer: React.ReactNode;
-}) {
-  return (
-    <>
-      {children}
-      {drawer}
-    </>
-  );
+export default function OrdersLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

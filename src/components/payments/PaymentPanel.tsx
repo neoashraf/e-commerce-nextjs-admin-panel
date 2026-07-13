@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
-import { formatBDT } from "@/lib/format";
+import { formatBDT, formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/stores/toast";
 import { Button, Card, Input, Select, Skeleton, StatusPill } from "@/components/ui";
 
@@ -16,16 +16,35 @@ import { Button, Card, Input, Select, Skeleton, StatusPill } from "@/components/
  * admin refund action limited to prepaid cancellations / duplicate captures
  * (409 not-refundable, 422 over-refund guards). No refunds for returns. Reads the
  * admin payment-status endpoint (GET /admin/payments/{id}); styled to the design system.
+ *
+ * For a gateway payment (bKash / SSLCommerz) the panel also surfaces the
+ * gateway transaction reference + paid-at time so an SSLCommerz-paid order shows
+ * the real captured-payment detail, not just a "paid" pill.
  */
 const paymentSchema = z.object({
   payment_id: z.string(),
   method: z.string().optional(),
   status: z.string(),
   amount: z.string().optional(),
+  currency: z.string().optional(),
   refunded_amount: z.string().optional(),
+  // Gateway transaction reference (e.g. SSLCommerz `bank_tran_id`) — shown for
+  // online methods so a paid order is traceable to the gateway record.
+  gateway_txn_id: z.string().nullable().optional(),
   paid_at: z.string().nullable().optional(),
 });
 type Payment = z.infer<typeof paymentSchema>;
+
+/** Friendly method labels — "SSLCommerz"/"bKash"/"COD", not a naive uppercase. */
+const METHOD_LABELS: Record<string, string> = {
+  bkash: "bKash",
+  sslcommerz: "SSLCommerz",
+  cod: "COD",
+};
+function methodLabel(method?: string): string {
+  if (!method) return "—";
+  return METHOD_LABELS[method.toLowerCase()] ?? method.toUpperCase();
+}
 
 const REASONS = [
   { value: "prepaid_order_cancelled", label: "Prepaid order cancelled" },
@@ -85,9 +104,7 @@ export function PaymentPanel({ paymentId }: { paymentId: string }) {
     <Card className="p-4">
       <dl className="space-y-1">
         <Row label="Method">
-          <span className="font-medium tabular-nums text-text">
-            {(data.method ?? "—").toUpperCase()}
-          </span>
+          <span className="font-medium text-text">{methodLabel(data.method)}</span>
         </Row>
         <Row label="Status">
           <StatusPill status={data.status} />
@@ -101,6 +118,21 @@ export function PaymentPanel({ paymentId }: { paymentId: string }) {
           <Row label="Refunded">
             <span className="font-medium tabular-nums text-text">
               {formatBDT(Number(data.refunded_amount))}
+            </span>
+          </Row>
+        )}
+        {/* Gateway capture detail — only meaningful for an online (gateway) payment. */}
+        {data.gateway_txn_id && (
+          <Row label="Transaction">
+            <span className="break-all font-medium tabular-nums text-text">
+              {data.gateway_txn_id}
+            </span>
+          </Row>
+        )}
+        {data.paid_at && (
+          <Row label="Paid at">
+            <span className="font-medium tabular-nums text-text">
+              {formatDateTime(data.paid_at)}
             </span>
           </Row>
         )}

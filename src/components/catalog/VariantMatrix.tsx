@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, History, Power, Sparkles, ImagePlus, Info, Trash2, MoreVertical } from "lucide-react";
 import { useGenerateVariants, useUpdateVariant, useAttribute } from "@/lib/api/hooks/useCatalog";
-import { useBulkInventory } from "@/lib/api/hooks/useInventory";
+import { useSetOnHand } from "@/lib/api/hooks/useInventory";
 import type {
   ProductDetail,
   ProductVariant,
@@ -29,9 +29,11 @@ import { pickRendition } from "@/lib/media";
  *     is an absolute set written to INV with an Avail · Resvd readout, and the ⋮ row menu carries
  *     enable/disable · stock history · delete.
  *
- * Wiring unchanged from before: generate (POST, appends), per-row sku/price/enabled PATCH, and
- * stock via the INV bulk-set. New: the image picker PATCHes `image_id` (contract-backed). Variant
- * **delete** has no endpoint yet — the menu item is shown disabled and flagged (brief filed).
+ * Wiring: generate (POST, appends), per-row sku/price/enabled PATCH, and on-hand via the
+ * first-class audited absolute set POST /admin/inventory/{variantId}/set (FR-INV-015, gated on
+ * `inventory.stock.adjust`) — NOT the bulk endpoint. The image picker PATCHes `image_id`
+ * (contract-backed). Variant **delete** has no endpoint yet — the menu item is shown disabled
+ * and flagged (brief filed).
  * Option ids render as human labels via the product's `configurable_attributes` lookup.
  */
 export function VariantMatrix({
@@ -93,7 +95,7 @@ export function VariantMatrix({
       {configurableAttributes.length === 0 ? (
         <p className="text-sm text-text-muted">This product&apos;s family has no configurable attributes (e.g. colour/size).</p>
       ) : (
-        <div className="rounded-xl border border-border bg-surface-subtle p-3.5">
+        <div className="rounded-lg border border-border bg-surface-subtle p-3.5">
           <div className="mb-3 flex items-start justify-between gap-2.5">
             <div>
               <h3 className="text-[13px] font-semibold text-text">Choose the variant axes</h3>
@@ -103,7 +105,7 @@ export function VariantMatrix({
               type="button"
               onClick={onGenerate}
               disabled={chosenAxes.length === 0 || generate.isPending}
-              className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-lg bg-accent-600 px-3.5 text-[12.5px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50"
+              className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-md bg-accent-600 px-3.5 text-[12.5px] font-semibold text-accent-fg hover:bg-accent-700 disabled:opacity-50"
             >
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               {generate.isPending ? "Generating…" : "Generate variants"}
@@ -128,7 +130,7 @@ export function VariantMatrix({
         <p className="text-sm text-text-muted">No variants yet.</p>
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-border">
+          <div className="overflow-hidden rounded-lg border border-border">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[880px] border-collapse text-sm">
                 <thead>
@@ -217,7 +219,7 @@ function VariantRow({
   codeLabels: Map<string, string>;
 }) {
   const update = useUpdateVariant(productId);
-  const bulkStock = useBulkInventory();
+  const setOnHand = useSetOnHand();
   const qc = useQueryClient();
   const [sku, setSku] = useState(variant.sku_code);
   const [skuError, setSkuError] = useState(false);
@@ -256,30 +258,30 @@ function VariantRow({
     setSkuError(false);
   }
 
-  // Stock lives in INV: set the absolute on-hand by SKU (so a stale read can't drift the value),
-  // then refresh the product so the matrix reflects the new level.
+  // On-hand lives in INV. This is an ABSOLUTE set (what-you-type-is-the-new-on-hand)
+  // via the first-class audited POST /admin/inventory/{variantId}/set (FR-INV-015) —
+  // NOT the bulk endpoint — so INV writes a `correction` movement stamped with the admin
+  // actor + a `product-editor` source tag. A target < 0 is rejected (409 NEGATIVE_ON_HAND)
+  // and the cell reverts. We refresh the product so the matrix reflects the new level.
   async function saveStock() {
     const target = Number(stock);
     if (!Number.isInteger(target) || target < 0) {
       setStock(String(variant.on_hand ?? 0));
-      toast("Stock must be a whole number ≥ 0.", "error");
+      toast("On-hand can't go below 0.", "error");
       return;
     }
     if (target === (variant.on_hand ?? 0)) return;
     try {
-      const res = await bulkStock.mutateAsync([
-        { sku_code: variant.sku_code, set_on_hand: target, reason: "Set in product editor" },
-      ]);
-      if (res.failed > 0) {
-        setStock(String(variant.on_hand ?? 0));
-        toast(res.errors[0]?.error === "unknown_sku" ? "Save the SKU first, then set stock." : "Couldn't set stock.", "error");
-        return;
-      }
+      await setOnHand.mutateAsync({ variantId: variant.id, on_hand: target });
       toast("Stock updated.");
       qc.invalidateQueries({ queryKey: ["admin-product", productId] });
-    } catch {
+    } catch (err) {
       setStock(String(variant.on_hand ?? 0));
-      toast("Couldn't set stock.", "error");
+      if (err instanceof ApiError && err.code === "NEGATIVE_ON_HAND") {
+        toast("On-hand can't go below 0.", "error");
+      } else {
+        toast("Couldn't set stock.", "error");
+      }
     }
   }
 
@@ -296,7 +298,7 @@ function VariantRow({
   }
 
   const inputBase =
-    "h-[34px] rounded-lg border bg-surface px-2.5 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600";
+    "h-[34px] rounded-md border bg-surface px-2.5 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600";
 
   return (
     <tr className={"border-b border-border " + (enabled ? "" : "bg-surface-subtle/40")}>
@@ -325,7 +327,7 @@ function VariantRow({
           aria-label="Pick variant image"
           aria-haspopup="menu"
           aria-expanded={pickerOpen}
-          className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface-subtle text-text-muted hover:border-accent-500"
+          className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-subtle text-text-muted hover:border-accent-500"
         >
           {currentImage ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -346,7 +348,7 @@ function VariantRow({
 
       {/* ON-HAND (absolute set → INV) */}
       <td className="px-3.5 py-2.5 text-right align-top">
-        <Can permission="inventory.stock.update" fallback={<span className="text-xs tabular-nums text-text-secondary">{variant.on_hand ?? 0}</span>}>
+        <Can permission="inventory.stock.adjust" fallback={<span className="text-xs tabular-nums text-text-secondary">{variant.on_hand ?? 0}</span>}>
           <input
             className={inputBase + " w-[74px] border-border-strong text-right tabular-nums"}
             type="text"
@@ -354,7 +356,7 @@ function VariantRow({
             value={stock}
             onChange={(e) => setStock(e.target.value)}
             onBlur={saveStock}
-            disabled={bulkStock.isPending}
+            disabled={setOnHand.isPending}
             aria-label="On-hand"
           />
           <div className="mt-1 whitespace-nowrap text-[10.5px] tabular-nums text-text-muted">Avail {avail} · Resvd {reserved}</div>
@@ -363,7 +365,7 @@ function VariantRow({
 
       {/* PRICE OVERRIDE */}
       <td className={"px-3.5 py-2.5 text-right align-top " + (enabled ? "" : "opacity-60")}>
-        <div className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-2.5">
+        <div className="inline-flex h-[34px] items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5">
           <span className="text-[12.5px] text-text-muted">৳</span>
           <input
             className="w-16 bg-transparent text-right text-sm tabular-nums text-text outline-none"
@@ -402,7 +404,7 @@ function VariantRow({
             <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); toggleEnabled(); }} className={menuItemCls}>
               <Power className="h-4 w-4 text-text-muted" aria-hidden="true" />{enabled ? "Disable" : "Enable"}
             </button>
-            <Link role="menuitem" href={`/admin/inventory/${variant.id}/movements`} onClick={() => setMenuOpen(false)} className={menuItemCls}>
+            <Link role="menuitem" href={`/admin/inventory/${variant.id}/movements?sku=${encodeURIComponent(variant.sku_code)}`} onClick={() => setMenuOpen(false)} className={menuItemCls}>
               <History className="h-4 w-4 text-text-muted" aria-hidden="true" />View stock history
             </Link>
             <div className="my-1 h-px bg-border" />
@@ -444,7 +446,7 @@ function RowMenu({ children, onClose }: { children: React.ReactNode; onClose: ()
     <div
       ref={ref}
       role="menu"
-      className="absolute right-2.5 top-[34px] z-30 min-w-[184px] rounded-lg border border-border bg-surface p-1.5 text-left shadow-lg"
+      className="absolute right-2.5 top-[34px] z-30 min-w-[184px] rounded-md border border-border bg-surface p-1.5 text-left shadow-lg"
     >
       {children}
     </div>
@@ -475,7 +477,7 @@ function ImagePickerPopover({
     };
   }, [onClose]);
   return (
-    <div ref={ref} role="menu" className="absolute left-3.5 top-[54px] z-30 w-[188px] rounded-xl border border-border bg-surface p-2.5 shadow-lg">
+    <div ref={ref} role="menu" className="absolute left-3.5 top-[54px] z-30 w-[188px] rounded-md border border-border bg-surface p-2.5 shadow-lg">
       <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Use an uploaded image</div>
       {images.length === 0 ? (
         <p className="px-1 py-2 text-[12px] text-text-muted">Upload images first.</p>

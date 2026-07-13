@@ -17,6 +17,7 @@ import {
   familyDetailSchema,
   createFamilyResultSchema,
   productPageSchema,
+  bulkStatusResultSchema,
   type ProductPage,
   type CategoryNode,
   type CategoryDetail,
@@ -354,6 +355,21 @@ export function useProductStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: "published" | "archived" | "draft" }) =>
       api.patch(`/admin/products/${id}/status`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+  });
+}
+
+/**
+ * Bulk publish / archive the selected rows (PATCH /admin/products/bulk-status,
+ * FR-CAT-015/016). Each item runs the same per-product validation as the single
+ * transition, so the batch never aborts — the result's `results[]` carries each
+ * id's ok/failure so the UI can show a per-item summary. Invalidates the list.
+ */
+export function useBulkProductStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: "published" | "archived" }) =>
+      api.patch("/admin/products/bulk-status", { ids, status }, { schema: bulkStatusResultSchema }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
   });
 }

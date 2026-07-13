@@ -4,50 +4,64 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useFamilies } from "@/lib/api/hooks/useCatalog";
 import { ProductEditor } from "@/components/catalog/ProductEditor";
+import { Button, Select } from "@/components/ui";
 
 /**
  * Create-product entry (catalog-product-editor-fe). Normally reached from the
- * products list's Create-product dialog (Products (CAT) design · FR-CAT-010),
- * which passes `type`/`family`/`sku` as query params → we open the family-driven
- * editor straight away (its first Save creates the product — no orphan drafts).
- * A minimal inline form remains as a fallback for direct navigation without params.
+ * Products-list Create dialog (CreateProductDialog), which collects type/family/
+ * sku and forwards them as query params — when present we go straight into the
+ * family-driven editor in create mode (no orphan drafts; the POST defers to the
+ * editor's first Save). For direct navigation (no params) we keep a small inline
+ * Type/Family/SKU form as a fallback.
  */
 export function NewProductView() {
   const sp = useSearchParams();
-  const paramType = sp.get("type") === "configurable" ? "configurable" : "simple";
-  const paramFamily = sp.get("family") ?? "";
-  const paramSku = sp.get("sku") ?? "";
-  const hasParams = !!paramFamily && !!paramSku;
+  const presetType = sp.get("type") === "configurable" ? "configurable" : sp.get("type") === "simple" ? "simple" : null;
+  const presetFamily = sp.get("family") ?? "";
+  const presetSku = sp.get("sku") ?? "";
+  const hasPreset = !!presetType && !!presetFamily && !!presetSku;
 
   const { data: families } = useFamilies();
-  const [type, setType] = useState<"simple" | "configurable">(paramType);
-  const [familyId, setFamilyId] = useState(paramFamily);
-  const [sku, setSku] = useState(paramSku);
-  const [started, setStarted] = useState(hasParams);
+  const [type, setType] = useState<"simple" | "configurable">(presetType ?? "simple");
+  const [familyId, setFamilyId] = useState(presetFamily);
+  const [sku, setSku] = useState(presetSku);
+  const [started, setStarted] = useState(false);
 
+  if (hasPreset) {
+    return <ProductEditor mode="create" initial={{ type: presetType, family_id: presetFamily, sku: presetSku }} />;
+  }
   if (started) {
     return <ProductEditor mode="create" initial={{ type, family_id: familyId || undefined, sku: sku || undefined }} />;
   }
 
-  const field = "h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
-
   return (
     <div className="max-w-md space-y-4">
-      <h1 className="text-xl font-bold text-gray-900">New product</h1>
-      <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Type</span>
-        <select className={field} value={type} onChange={(e) => setType(e.target.value as "simple" | "configurable")}>
-          <option value="simple">Simple</option><option value="configurable">Configurable (has variants)</option>
-        </select>
+      <h1 className="text-xl font-bold text-text">New product</h1>
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-text">Type</span>
+        <Select value={type} onChange={(e) => setType(e.target.value as "simple" | "configurable")}>
+          <option value="simple">Simple</option>
+          <option value="configurable">Configurable (has variants)</option>
+        </Select>
       </label>
-      <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">Attribute family</span>
-        <select className={field} value={familyId} onChange={(e) => setFamilyId(e.target.value)}>
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-text">Attribute family</span>
+        <Select value={familyId} onChange={(e) => setFamilyId(e.target.value)}>
           <option value="">Choose a family…</option>
           {families?.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>
+        </Select>
       </label>
-      <label className="block"><span className="mb-1 block text-sm font-medium text-gray-900">SKU</span><input className={field} value={sku} onChange={(e) => setSku(e.target.value)} placeholder="PRED-ELITE" /></label>
-      <p className="text-xs text-gray-400">Type and family can&apos;t be changed after the product is created.</p>
-      <button type="button" disabled={!familyId || !sku.trim()} onClick={() => setStarted(true)} className="inline-flex h-10 items-center rounded-md bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">Continue</button>
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-text">SKU</span>
+        <input
+          className="h-9 w-full rounded-md border border-border-strong bg-surface px-3 font-mono text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1"
+          value={sku}
+          onChange={(e) => setSku(e.target.value)}
+          placeholder="PRED-ELITE"
+        />
+      </label>
+      <p className="text-xs text-text-muted">Type and family can&apos;t be changed after the product is created.</p>
+      <Button disabled={!familyId || !sku.trim()} onClick={() => setStarted(true)}>Continue</Button>
     </div>
   );
 }

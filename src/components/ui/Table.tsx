@@ -74,7 +74,10 @@ export function TH({
         sort === "asc" ? "ascending" : sort === "desc" ? "descending" : undefined
       }
       className={cn(
-        "px-4 py-2.5 text-eyebrow uppercase tracking-wide text-text-muted",
+        // `text-eyebrow` already carries the header letter-spacing; don't add
+        // `tracking-wide` on top or it fights the token and sortable (button)
+        // vs. plain (text) headers end up spaced differently in the same row.
+        "px-4 py-2.5 text-eyebrow uppercase text-text-muted",
         numeric ? "text-right" : "text-left",
         className,
       )}
@@ -85,7 +88,10 @@ export function TH({
           type="button"
           onClick={onSort}
           className={cn(
-            "group inline-flex items-center gap-1 rounded-sm hover:text-text-secondary",
+            // Re-apply `text-eyebrow` on the button: a <button> resets font-size to
+            // the UA default, so without this sortable headers render bigger than
+            // plain ones. This pins every sortable header to the same 11px/600 eyebrow.
+            "group inline-flex items-center gap-1 rounded-sm text-eyebrow hover:text-text-secondary",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600",
             numeric && "flex-row-reverse",
           )}

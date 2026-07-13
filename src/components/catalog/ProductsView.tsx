@@ -1,9 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowUpCircle, Box, Download, Layers, Pencil, Search, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowUpCircle,
+  Box,
+  Download,
+  Info,
+  Layers,
+  Pencil,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   useProducts,
   useProductStatus,
@@ -12,7 +24,11 @@ import {
   useFamilies,
   useCategoryTree,
 } from "@/lib/api/hooks/useCatalog";
-import type { ProductRow, CategoryNode } from "@/lib/api/schemas/catalog";
+import type {
+  ProductRow,
+  CategoryNode,
+  QtyStatus,
+} from "@/lib/api/schemas/catalog";
 import { productListSchema } from "@/lib/api/schemas/catalog";
 import { Can } from "@/lib/permissions/Can";
 import { ApiError } from "@/lib/api/errors";
@@ -20,8 +36,10 @@ import { formatBDT } from "@/lib/format";
 import { resolveMediaUrl } from "@/lib/media";
 import { toast } from "@/lib/stores/toast";
 import { usePageParams } from "@/lib/usePageParams";
+import { useDebouncedCallback } from "@/lib/useDebouncedCallback";
 import { buildCsv, downloadCsv, fetchAllRows, todayStamp } from "@/lib/exportCsv";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { CreateProductDialog } from "@/components/catalog/CreateProductDialog";
 import {
   Badge,
@@ -42,6 +60,7 @@ import {
   TH,
   THead,
   TR,
+  type SortDir,
 } from "@/components/ui";
 
 /** Flatten the category tree into indented options for the filter select
@@ -60,29 +79,49 @@ function flattenCategories(
   ]);
 }
 
-/** Stock-status presentation for the QTY cell — same short labels + tones as the inventory page. */
-type QtyStatus = "in_stock" | "low_stock" | "out_of_stock";
-const QTY_STATUS_LABEL: Record<QtyStatus, string> = { in_stock: "In stock", low_stock: "Low", out_of_stock: "Out" };
-const QTY_NUM_TONE: Record<QtyStatus, string> = { in_stock: "text-text", low_stock: "text-warning", out_of_stock: "text-error" };
-const QTY_LABEL_TONE: Record<QtyStatus, string> = { in_stock: "text-text-muted", low_stock: "text-warning", out_of_stock: "text-error" };
-
 const TYPE_SEGMENTS = [
   { value: "", label: "All" },
   { value: "simple", label: "Simple" },
   { value: "configurable", label: "Configurable" },
 ] as const;
 
+/** Live INV qty-status → label + cell color (design QHINT). */
+const QTY_HINT: Record<QtyStatus, { label: string; tone: string }> = {
+  in_stock: { label: "In stock", tone: "text-success" },
+  low_stock: { label: "Low", tone: "text-warning" },
+  out_of_stock: { label: "Out", tone: "text-error" },
+};
+
+/** Client-side sort key (the list API has no sort param yet — we sort the
+ * current page). `null` = server order. */
+type SortKey = "name" | "price" | "status";
+
 /** Row "⋯" menu item (matches OrderRowMenu / the §8.6 actions cell). */
 const menuItemCls =
   "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text-secondary hover:bg-surface-subtle";
 
+/** Effective (sortable) price of a row — sale price when active, else base. */
+function effectivePrice(p: ProductRow): number {
+  const raw = p.sale_active && p.sale_price ? p.sale_price : p.base_price;
+  return raw ? Number(raw) : 0;
+}
+
+const STATUS_RANK: Record<ProductRow["status"], number> = {
+  draft: 0,
+  published: 1,
+  archived: 2,
+};
+
 /**
- * Products list (products-list.md, catalog-products-list-fe) on the AD6 Data Table
- * primitive (design-system §8.6): Card-wrapped table, eyebrow headers, StatusPill,
- * right-aligned numerics, and a 15/page paginated footer backed by the API
- * `meta.total`. URL-reflected search + status/family/type filters + `page`; row
- * actions (publish/archive/delete) with NOT_PUBLISHABLE (422) + PRODUCT_IN_ORDER
- * (409) guards. Behaviour unchanged — presentation + pagination only.
+ * Products list (products-list.md, Products (CAT) design). AD6 data table:
+ * Card-wrapped table, eyebrow headers, StatusPill, right-aligned numerics,
+ * paginated footer. URL-reflected search + status/family/category/type filters
+ * + page. Features: row checkboxes + bulk publish/archive bar (per-item result
+ * summary), live qty + In/Low/Out stock status, struck base + sale price,
+ * type-icon pills, client-side column sort (Name/Price/Status over the current
+ * page), debounced search with a clear button, a Create-Product modal, and the
+ * row ••• menu (Edit · Publish[draft/archived] · Archive[published] · Delete)
+ * with NOT_PUBLISHABLE (422) + PRODUCT_IN_ORDER (409) guards.
  */
 export function ProductsView() {
   const router = useRouter();
@@ -93,12 +132,10 @@ export function ProductsView() {
   const type = sp.get("type") ?? "";
   const category = sp.get("category") ?? "";
   const q = sp.get("q") ?? "";
-  const sort = sp.get("sort") ?? "";
-  const order = sp.get("order") ?? "";
   const { page, pageSize, setPage, setPageSize } = usePageParams();
 
   const { data, isLoading, isError, refetch } = useProducts({
-    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, category: category || undefined, sort: sort || undefined, order: order || undefined, page, limit: pageSize,
+    q: q || undefined, status: status || undefined, family: family || undefined, type: type || undefined, category: category || undefined, page, limit: pageSize,
   });
   const { data: families } = useFamilies();
   const { data: categoryTree } = useCategoryTree();
@@ -106,50 +143,94 @@ export function ProductsView() {
   const bulkM = useBulkProductStatus();
   const del = useDeleteProduct();
   const [confirm, setConfirm] = useState<{ kind: "archive" | "delete"; product: ProductRow } | null>(null);
-  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
 
-  const rows = data?.data ?? [];
+  const rows = useMemo(() => data?.data ?? [], [data]);
   const total = data?.meta.total ?? 0;
   const categoryOptions = flattenCategories(categoryTree ?? []);
   const [exporting, setExporting] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
 
-  // Row selection for bulk publish/archive. Scoped to the current page; reset whenever the visible
-  // rows change (page/filter/search/refetch) so a bulk action never targets stale, off-screen ids.
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const rowIdsKey = rows.map((r) => r.id).join(",");
-  useEffect(() => setSelected(new Set()), [rowIdsKey]);
-  const allOnPageSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  // Sort the current page client-side (the list endpoint has no sort param yet;
+  // BE gap noted in the PR). `null` key keeps the server order.
+  const sortedRows = useMemo(() => {
+    if (!sortKey || !sortDir) return rows;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      let av: number | string;
+      let bv: number | string;
+      if (sortKey === "price") { av = effectivePrice(a); bv = effectivePrice(b); }
+      else if (sortKey === "status") { av = STATUS_RANK[a.status]; bv = STATUS_RANK[b.status]; }
+      else { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  }, [rows, sortKey, sortDir]);
+
+  /** Toggle a column's sort: first click asc (price → desc), then flip, all
+   * client-side. Clicking a new column resets direction. */
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(key === "price" ? "desc" : "asc");
+    }
+  }
+  const sortOf = (key: SortKey): SortDir => (sortKey === key ? sortDir : null);
+
+  // ---- selection (bulk) ----
+  const selectableIds = sortedRows.map((r) => r.id);
+  const allChecked = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+  const someChecked = selectableIds.some((id) => selected.has(id));
   function toggleRow(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
   function toggleAll() {
-    setSelected(allOnPageSelected ? new Set() : new Set(rows.map((r) => r.id)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const all = selectableIds.every((id) => next.has(id));
+      if (all) selectableIds.forEach((id) => next.delete(id));
+      else selectableIds.forEach((id) => next.add(id));
+      return next;
+    });
   }
-  async function runBulk(next: "published" | "archived") {
-    const ids = [...selected];
+  function clearSelection() { setSelected(new Set()); }
+
+  /**
+   * Bulk publish/archive the selected rows → PATCH /admin/products/bulk-status.
+   * The batch never aborts; show a per-item summary (n published / m couldn't,
+   * with the blocked names) from `results[]`. On success the list invalidates.
+   */
+  async function runBulk(targetStatus: "published" | "archived") {
+    const ids = selectableIds.filter((id) => selected.has(id));
     if (ids.length === 0) return;
     try {
-      const res = await bulkM.mutateAsync({ ids, status: next });
-      const verb = next === "published" ? "published" : "archived";
-      const n = (c: number) => `${c} ${c === 1 ? "product" : "products"}`;
+      const res = await bulkM.mutateAsync({ ids, status: targetStatus });
+      const verb = targetStatus === "published" ? "published" : "archived";
       if (res.failed === 0) {
-        toast(`${n(res.succeeded)} ${verb}.`);
-      } else if (res.succeeded === 0) {
-        toast(`Couldn't ${next === "published" ? "publish" : "archive"} ${n(res.failed)} — check they're eligible.`, "error");
+        toast(`${res.succeeded} ${res.succeeded === 1 ? "product" : "products"} ${verb}.`);
       } else {
-        toast(`${n(res.succeeded)} ${verb}; ${res.failed} skipped (not eligible).`, "info");
+        const blocked = res.results
+          .filter((r) => !r.ok)
+          .map((r) => rows.find((p) => p.id === r.id)?.name ?? r.id);
+        const sample = blocked.slice(0, 3).join(", ");
+        const more = blocked.length > 3 ? ` +${blocked.length - 3} more` : "";
+        toast(
+          `${res.succeeded} ${verb}, ${res.failed} couldn’t be — ${sample}${more}. Check required fields.`,
+          "error",
+        );
       }
-      setSelected(new Set());
-      setBulkConfirm(false);
+      clearSelection();
     } catch {
-      toast("Couldn't apply the bulk action. Try again.", "error");
-      setBulkConfirm(false);
+      toast("Couldn’t apply the bulk action. Try again.", "error");
     }
   }
 
@@ -169,7 +250,7 @@ export function ProductsView() {
         productListSchema,
       );
       const csv = buildCsv(
-        ["SKU", "Name", "Type", "Family", "Category", "Base price", "Status", "Qty"],
+        ["SKU", "Name", "Type", "Family", "Category", "Base price", "Sale price", "Status", "Qty"],
         all.map((p) => [
           p.sku ?? "",
           p.name,
@@ -177,6 +258,7 @@ export function ProductsView() {
           p.family ?? "",
           p.primary_category ?? "",
           p.base_price ?? "",
+          p.sale_active && p.sale_price ? p.sale_price : "",
           p.status,
           p.qty ?? "",
         ]),
@@ -196,17 +278,9 @@ export function ProductsView() {
     router.push(`${pathname}?${next.toString()}`);
   }
 
-  /** Toggle column sort (FR-CAT-042): same column flips asc↔desc; a new column starts ascending. */
-  function toggleSort(key: "name" | "price" | "status") {
-    const nextOrder = sort === key && order === "asc" ? "desc" : "asc";
-    const next = new URLSearchParams(sp.toString());
-    next.set("sort", key);
-    next.set("order", nextOrder);
-    next.delete("page");
-    router.push(`${pathname}?${next.toString()}`);
-  }
-  const sortDir = (key: string): "asc" | "desc" | undefined =>
-    sort === key ? (order === "desc" ? "desc" : "asc") : undefined;
+  // Search is debounced (~300ms) so each keystroke doesn't refetch; the clear
+  // button (X) resets it immediately. Both write `q` into the URL.
+  const debouncedSearch = useDebouncedCallback((value: string) => setParam("q", value), 300);
 
   async function publish(p: ProductRow) {
     try {
@@ -239,6 +313,7 @@ export function ProductsView() {
         await del.mutateAsync(confirm.product.id);
         toast("Product deleted.");
       }
+      setSelected((prev) => { const next = new Set(prev); next.delete(confirm.product.id); return next; });
       setConfirm(null);
     } catch (err) {
       setConfirm(null);
@@ -249,6 +324,8 @@ export function ProductsView() {
       }
     }
   }
+
+  const selectedCount = selectableIds.filter((id) => selected.has(id)).length;
 
   return (
     <div className="space-y-5">
@@ -271,13 +348,7 @@ export function ProductsView() {
             </Button>
           </Can>
           <Can permission="catalog.product.create">
-            <button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent-600 px-4 text-sm font-medium text-accent-fg shadow-xs transition-colors hover:bg-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-2"
-            >
-              Create product
-            </button>
+            <Button onClick={() => setCreateOpen(true)}>Create product</Button>
           </Can>
         </div>
       </div>
@@ -286,10 +357,22 @@ export function ProductsView() {
         <div className="w-full sm:w-64">
           <Input
             leadingIcon={<Search className="h-4 w-4" />}
-            placeholder="Search name or SKU…"
+            placeholder="Search by name or SKU…"
             aria-label="Search products"
             defaultValue={q}
-            onKeyDown={(e) => e.key === "Enter" && setParam("q", (e.target as HTMLInputElement).value)}
+            onChange={(e) => debouncedSearch(e.target.value)}
+            trailing={
+              q ? (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={() => setParam("q", "")}
+                  className="flex h-5 w-5 items-center justify-center rounded text-text-faint hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : undefined
+            }
           />
         </div>
         <div className="w-40">
@@ -326,84 +409,83 @@ export function ProductsView() {
       </div>
 
       <Card>
+        {/* Bulk action bar — appears once a row is selected (FR-CAT-015/016). */}
+        {selectedCount > 0 && (
+          <div className="flex items-center gap-3 border-b border-accent-100 bg-accent-50 px-4 py-2.5">
+            <span className="text-sm font-semibold tabular-nums text-accent-700">
+              {selectedCount} selected
+            </span>
+            <span className="h-4 w-px bg-accent-100" aria-hidden="true" />
+            <Can permission="catalog.product.update">
+              <button
+                type="button"
+                onClick={() => runBulk("published")}
+                disabled={bulkM.isPending}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-accent-600 bg-surface px-3 text-[13px] font-semibold text-accent-700 hover:bg-accent-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+              >
+                <ArrowUpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                Publish
+              </button>
+              <button
+                type="button"
+                onClick={() => runBulk("archived")}
+                disabled={bulkM.isPending}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-[13px] font-semibold text-text-secondary hover:bg-surface-subtle disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+              >
+                <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                Archive
+              </button>
+            </Can>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-semibold text-text-muted hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              Clear
+            </button>
+          </div>
+        )}
+
         {isLoading ? (
           <SkeletonRows rows={10} cols={8} />
         ) : isError ? (
           <ErrorState description="Couldn't load products." onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
-          <EmptyState title="No products match your filters." description="Try clearing search or widening the filters." />
+          <EmptyState title="No products match these filters." description="Try a different status or clear the filters above." />
         ) : (
           <>
-            {selected.size > 0 && (
-              <Can permission="catalog.product.update">
-                <div className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-subtle px-4 py-2.5">
-                  <span className="text-sm font-medium text-text">
-                    {selected.size} selected
-                  </span>
-                  <div className="ml-auto flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      leadingIcon={<ArrowUpCircle className="h-4 w-4" aria-hidden="true" />}
-                      loading={bulkM.isPending}
-                      onClick={() => runBulk("published")}
-                    >
-                      Publish
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      leadingIcon={<Archive className="h-4 w-4" aria-hidden="true" />}
-                      loading={bulkM.isPending}
-                      onClick={() => setBulkConfirm(true)}
-                    >
-                      Archive
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => setSelected(new Set())}
-                      className="rounded-md px-2 py-1 text-sm text-text-muted hover:text-text"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-              </Can>
-            )}
             <Table>
               <THead>
                 <TR hover={false}>
-                  <TH className="w-10">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all products on this page"
-                      className="h-4 w-4 rounded border-border text-accent-600 focus:ring-accent-600"
-                      checked={allOnPageSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = selected.size > 0 && !allOnPageSelected;
-                      }}
+                  <TH className="w-12">
+                    <Checkbox
+                      checked={allChecked}
+                      indeterminate={!allChecked && someChecked}
                       onChange={toggleAll}
+                      aria-label="Select all products"
                     />
                   </TH>
-                  <TH sort={sortDir("name")} onSort={() => toggleSort("name")}>Product</TH>
-                  <TH numeric sort={sortDir("price")} onSort={() => toggleSort("price")}>Price</TH>
+                  <TH sort={sortOf("name")} onSort={() => toggleSort("name")}>Product</TH>
+                  <TH numeric sort={sortOf("price")} onSort={() => toggleSort("price")}>Price</TH>
                   <TH numeric>Qty</TH>
-                  <TH sort={sortDir("status")} onSort={() => toggleSort("status")}>Status</TH>
+                  <TH sort={sortOf("status")} onSort={() => toggleSort("status")}>Status</TH>
                   <TH>Category</TH>
                   <TH>Type</TH>
                   <TH className="text-right"><span className="sr-only">Actions</span></TH>
                 </TR>
               </THead>
               <TBody>
-                {rows.map((p) => (
-                  <TR key={p.id}>
-                    <TD>
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${p.name}`}
-                        className="h-4 w-4 rounded border-border text-accent-600 focus:ring-accent-600"
+                {sortedRows.map((p) => {
+                  const onSale = !!(p.sale_active && p.sale_price);
+                  const hint = p.qty_status ? QTY_HINT[p.qty_status] : null;
+                  return (
+                  <TR key={p.id} className={selected.has(p.id) ? "bg-accent-50" : undefined}>
+                    <TD onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
                         checked={selected.has(p.id)}
                         onChange={() => toggleRow(p.id)}
+                        aria-label={`Select ${p.name}`}
                       />
                     </TD>
                     <TD>
@@ -415,38 +497,44 @@ export function ProductsView() {
                           )}
                         </span>
                         <span className="min-w-0">
-                          <Link href={`/admin/products/${p.id}`} className="block truncate font-medium text-text hover:text-accent-700">{p.name}</Link>
+                          <Link href={`/admin/products/${p.id}`} className="block truncate font-medium text-text hover:text-accent-600 hover:underline">{p.name}</Link>
                           <span className="block truncate text-xs text-text-muted">{p.sku ?? "—"}{p.family ? ` · ${p.family}` : ""}</span>
                         </span>
                       </div>
                     </TD>
-                    <TD numeric className="text-text">{p.base_price ? formatBDT(Number(p.base_price)) : "—"}</TD>
+                    <TD numeric className="text-text">
+                      <div className="flex flex-col items-end leading-tight">
+                        {onSale && (
+                          <span className="text-xs text-text-muted line-through">{formatBDT(Number(p.base_price))}</span>
+                        )}
+                        <span className="font-semibold">
+                          {onSale ? formatBDT(Number(p.sale_price)) : p.base_price ? formatBDT(Number(p.base_price)) : "—"}
+                        </span>
+                      </div>
+                    </TD>
                     <TD numeric>
                       {p.qty == null ? (
-                        <span title="Stock unavailable" className="text-text-faint">—</span>
+                        <span title="Stock unavailable — couldn't reach Inventory." className="inline-flex cursor-help items-center justify-end gap-1.5 text-text-faint">
+                          <span>—</span>
+                          <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
                       ) : (
-                        <span className="inline-flex flex-col items-end leading-tight">
-                          <span className={`font-medium tabular-nums ${QTY_NUM_TONE[p.qty_status ?? "in_stock"]}`}>
-                            {p.qty}
-                          </span>
-                          {p.qty_status && (
-                            <span className={`text-[11px] ${QTY_LABEL_TONE[p.qty_status]}`}>
-                              {QTY_STATUS_LABEL[p.qty_status]}
-                            </span>
-                          )}
+                        <span className="flex flex-col items-end leading-tight">
+                          <span className={`font-semibold ${hint?.tone ?? "text-text"}`}>{p.qty}</span>
+                          {hint && <span className={`text-[10.5px] font-semibold ${hint.tone}`}>{hint.label}</span>}
                         </span>
                       )}
                     </TD>
                     <TD><StatusPill status={p.status} /></TD>
                     <TD>{p.primary_category ?? "—"}</TD>
                     <TD>
-                      <Badge tone="neutral" className="gap-1.5 capitalize">
-                        {(p.type ?? "simple") === "configurable" ? (
-                          <Layers className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
-                        ) : (
-                          <Box className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
-                        )}
-                        {p.type ?? "simple"}
+                      <Badge tone="neutral" className="capitalize">
+                        <span className="inline-flex items-center gap-1.5">
+                          {p.type === "configurable"
+                            ? <Layers className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+                            : <Box className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />}
+                          {p.type ?? "simple"}
+                        </span>
                       </Badge>
                     </TD>
                     <TD className="text-right">
@@ -464,7 +552,7 @@ export function ProductsView() {
                                   <Pencil className="h-4 w-4 text-text-muted" aria-hidden="true" />
                                   Edit
                                 </button>
-                                {p.status === "draft" && (
+                                {(p.status === "draft" || p.status === "archived") && (
                                   <button
                                     type="button"
                                     role="menuitem"
@@ -516,7 +604,8 @@ export function ProductsView() {
                       </div>
                     </TD>
                   </TR>
-                ))}
+                  );
+                })}
               </TBody>
             </Table>
             <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
@@ -524,28 +613,17 @@ export function ProductsView() {
         )}
       </Card>
 
+      <CreateProductDialog open={createOpen} onClose={() => setCreateOpen(false)} />
+
       <ConfirmDialog
         open={!!confirm}
         title={confirm?.kind === "archive" ? "Archive product?" : "Delete product?"}
-        message={confirm?.kind === "archive" ? `"${confirm?.product.name}" will be hidden from the storefront but kept for order history.` : `"${confirm?.product.name}" will be deleted.`}
+        message={confirm?.kind === "archive" ? `"${confirm?.product.name}" will be hidden from the storefront but kept for order history.` : `"${confirm?.product.name}" will be deleted. This can't be undone.`}
         confirmLabel={confirm?.kind === "archive" ? "Archive" : "Delete"}
         danger
         pending={statusM.isPending || del.isPending}
         onConfirm={runConfirm}
         onClose={() => setConfirm(null)}
-      />
-
-      <CreateProductDialog open={createOpen} onClose={() => setCreateOpen(false)} />
-
-      <ConfirmDialog
-        open={bulkConfirm}
-        title={`Archive ${selected.size} ${selected.size === 1 ? "product" : "products"}?`}
-        message="Archived products are hidden from the storefront but kept for order history. Already-archived items are skipped."
-        confirmLabel="Archive"
-        danger
-        pending={bulkM.isPending}
-        onConfirm={() => runBulk("archived")}
-        onClose={() => setBulkConfirm(false)}
       />
     </div>
   );

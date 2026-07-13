@@ -57,7 +57,7 @@ type AttrValue = string | string[] | boolean;
  */
 
 const labelCls = "flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted";
-const inputCls = "h-[38px] w-full rounded-lg border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1";
+const inputCls = "h-[38px] w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1";
 
 /**
  * Turn a 400 ApiError into something the admin can act on. The backend already
@@ -152,18 +152,20 @@ export function ProductEditor({
     return { categoryOptions: opts, categoryLabel: map };
   }, [categoryTree]);
 
-  // Effective price preview for the Price rail.
-  const effectivePrice = useMemo(() => {
+  const saleInvalid = !!(salePrice && basePrice && Number(salePrice) >= Number(basePrice));
+
+  // Effective price preview for the Price rail. Mirrors the design's Price block:
+  // "৳ <amount> · sale price" when a valid sale price applies, else "· base price"
+  // (docs/.../Product Editor (CAT).dc.html → effectivePrice / effectiveNote).
+  const { effectivePrice, effectiveNote } = useMemo(() => {
     const base = Number(basePrice);
     const sale = Number(salePrice);
-    if (salePrice && sale > 0 && (!basePrice || sale < base)) return sale;
-    return base || 0;
-  }, [basePrice, salePrice]);
-
-  const saleInvalid = !!(salePrice && basePrice && Number(salePrice) >= Number(basePrice));
-  // Whether the effective price is the sale price (vs. the base) — drives the "· sale/base price" note.
-  const usingSalePrice =
-    !!salePrice && Number(salePrice) > 0 && !saleInvalid && (!basePrice || Number(salePrice) < Number(basePrice));
+    const saleApplies = !!salePrice && sale > 0 && !saleInvalid && (!basePrice || sale < base);
+    return {
+      effectivePrice: saleApplies ? sale : base || 0,
+      effectiveNote: saleApplies ? "· sale price" : "· base price",
+    };
+  }, [basePrice, salePrice, saleInvalid]);
 
   // Section refs let onSave/onPublish jump to the offending section on a validation error.
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -330,14 +332,14 @@ export function ProductEditor({
               </span>
             )}
             {product && status !== "archived" && (
-              <button type="button" onClick={onArchive} disabled={statusM.isPending} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-text-muted hover:bg-surface-subtle disabled:opacity-50">
+              <button type="button" onClick={onArchive} disabled={statusM.isPending} className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-text-muted hover:bg-surface-subtle disabled:opacity-50">
                 <Archive className="h-4 w-4" aria-hidden="true" />Archive
               </button>
             )}
-            <button type="button" onClick={onPublish} disabled={publishDisabled} title={mode === "create" ? "Save the product first" : undefined} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-3.5 text-sm font-semibold text-text hover:bg-surface-subtle disabled:opacity-50">
+            <button type="button" onClick={onPublish} disabled={publishDisabled} title={mode === "create" ? "Save the product first" : undefined} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3.5 text-sm font-semibold text-text hover:bg-surface-subtle disabled:opacity-50">
               <ArrowUpCircle className="h-4 w-4" aria-hidden="true" />Publish
             </button>
-            <button type="button" onClick={onSave} disabled={pending} className="inline-flex h-9 items-center rounded-lg bg-accent-600 px-4 text-sm font-semibold text-accent-fg shadow-xs hover:bg-accent-700 disabled:opacity-50">
+            <button type="button" onClick={onSave} disabled={pending} className="inline-flex h-9 items-center rounded-md bg-accent-600 px-4 text-sm font-semibold text-accent-fg shadow-xs hover:bg-accent-700 disabled:opacity-50">
               {pending ? "Saving…" : "Save"}
             </button>
           </div>
@@ -347,14 +349,14 @@ export function ProductEditor({
       {/* ===== CONTENT ===== */}
       <div className="mx-auto w-full max-w-[1440px] flex-1 px-5 pb-8 pt-5 md:px-6">
         {stale && (
-          <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
             This product changed since you opened it. Reload to see the latest.
             <button type="button" onClick={() => router.refresh()} className="shrink-0 font-semibold underline">Reload</button>
           </div>
         )}
-        {error && <p role="alert" className="mb-4 rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">{error}</p>}
+        {error && <p role="alert" className="mb-4 rounded-lg border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">{error}</p>}
         {publishErrors.length > 0 && (
-          <div role="alert" className="mb-4 rounded-xl border border-error/30 bg-error/10 p-4">
+          <div role="alert" className="mb-4 rounded-lg border border-error/30 bg-error/10 p-4">
             <div className="flex items-start gap-2.5">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-error" aria-hidden="true" />
               <div className="flex-1">
@@ -401,7 +403,7 @@ export function ProductEditor({
                 </label>
                 <label className="block">
                   <span className={labelCls}>Description</span>
-                  <div className="mt-1.5 overflow-hidden rounded-lg border border-border-strong bg-surface focus-within:ring-2 focus-within:ring-accent-600">
+                  <div className="mt-1.5 overflow-hidden rounded-md border border-border-strong bg-surface focus-within:ring-2 focus-within:ring-accent-600">
                     <div className="flex items-center gap-0.5 border-b border-border bg-surface-subtle px-2 py-1.5">
                       {([
                         { kind: "bold" as const, label: "Bold", Icon: Bold },
@@ -490,13 +492,9 @@ export function ProductEditor({
                     <input className={cn(inputCls, "mt-1.5")} type="date" value={saleEnd} onChange={(e) => { setSaleEnd(e.target.value); markDirty(); }} />
                   </label>
                 </div>
-                <div className="flex items-center gap-2 rounded-lg bg-surface-subtle px-3 py-2.5 text-xs text-text-secondary">
-                  <Tags className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                  <span>
-                    Effective price{" "}
-                    <strong className="font-bold tabular-nums">৳ {effectivePrice.toLocaleString("en-US")}</strong>{" "}
-                    <span className="text-text-muted">· {usingSalePrice ? "sale price" : "base price"}</span>
-                  </span>
+                <div className="flex items-center gap-2 rounded-md bg-surface-subtle px-3 py-2.5 text-xs text-text-secondary">
+                  <Banknote className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                  <span>Effective price <strong className="font-bold tabular-nums">৳ {effectivePrice.toLocaleString("en-US")}</strong> <span className="text-text-muted">{effectiveNote}</span></span>
                 </div>
               </Section>
 
@@ -521,7 +519,7 @@ export function ProductEditor({
                     ))}
                   </div>
                   <select
-                    className="h-[34px] w-full cursor-pointer rounded-lg border border-dashed border-border-strong bg-surface-subtle px-3 text-[12.5px] font-medium text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+                    className="h-[34px] w-full cursor-pointer rounded-md border border-dashed border-border-strong bg-surface-subtle px-3 text-[12.5px] font-medium text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
                     value=""
                     onChange={(e) => { const v = e.target.value; if (v && v !== primaryCategoryId && !additionalCategoryIds.includes(v)) { setAdditionalCategoryIds((p) => [...p, v]); markDirty(); } }}
                   >
@@ -554,7 +552,7 @@ export function ProductEditor({
                 </label>
                 <label className="block">
                   <span className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-text-muted">Meta description <span className={cn("font-normal normal-case tracking-normal", metaDesc.length > 160 ? "text-error" : "text-text-faint")}>{metaDesc.length}/160</span></span>
-                  <textarea className={cn("mt-1.5 w-full rounded-lg border bg-surface px-3 py-2.5 text-sm leading-snug text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600", metaDesc.length > 160 ? "border-error" : "border-border-strong")} rows={3} placeholder="Falls back to the short description" value={metaDesc} onChange={(e) => { setMetaDesc(e.target.value); markDirty(); }} />
+                  <textarea className={cn("mt-1.5 w-full rounded-md border bg-surface px-3 py-2.5 text-sm leading-snug text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600", metaDesc.length > 160 ? "border-error" : "border-border-strong")} rows={3} placeholder="Falls back to the short description" value={metaDesc} onChange={(e) => { setMetaDesc(e.target.value); markDirty(); }} />
                 </label>
               </Section>
 
@@ -581,11 +579,11 @@ export function ProductEditor({
             <span className={cn("whitespace-nowrap font-medium", dirty ? "text-warning" : "text-text-muted")}>{dirty ? "Unsaved changes" : mode === "create" ? "Not saved yet" : "All changes saved"}</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <button type="button" onClick={onCancel} className="h-9 rounded-lg px-4 text-sm font-semibold text-text-muted hover:bg-surface-subtle">Cancel</button>
-            <button type="button" onClick={onPublish} disabled={publishDisabled} title={mode === "create" ? "Save the product first" : undefined} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-3.5 text-sm font-semibold text-text hover:bg-surface-subtle disabled:opacity-50">
+            <button type="button" onClick={onCancel} className="h-9 rounded-md px-4 text-sm font-semibold text-text-muted hover:bg-surface-subtle">Cancel</button>
+            <button type="button" onClick={onPublish} disabled={publishDisabled} title={mode === "create" ? "Save the product first" : undefined} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3.5 text-sm font-semibold text-text hover:bg-surface-subtle disabled:opacity-50">
               <ArrowUpCircle className="h-4 w-4" aria-hidden="true" />Publish
             </button>
-            <button type="button" onClick={onSave} disabled={pending} className="inline-flex h-9 items-center rounded-lg bg-accent-600 px-4 text-sm font-semibold text-accent-fg shadow-xs hover:bg-accent-700 disabled:opacity-50">{pending ? "Saving…" : "Save product"}</button>
+            <button type="button" onClick={onSave} disabled={pending} className="inline-flex h-9 items-center rounded-md bg-accent-600 px-4 text-sm font-semibold text-accent-fg shadow-xs hover:bg-accent-700 disabled:opacity-50">{pending ? "Saving…" : "Save product"}</button>
           </div>
         </div>
       </div>
@@ -614,7 +612,7 @@ function Section({
     <section
       id={id}
       ref={setRef}
-      className="scroll-mt-[120px] overflow-hidden rounded-xl border border-border bg-surface shadow-xs"
+      className="scroll-mt-[120px] overflow-hidden rounded-lg border border-border bg-surface shadow-xs"
     >
       <div className="flex items-center gap-2.5 border-b border-border px-4 py-3.5">
         <Icon className="h-4 w-4 text-accent-600" aria-hidden="true" />

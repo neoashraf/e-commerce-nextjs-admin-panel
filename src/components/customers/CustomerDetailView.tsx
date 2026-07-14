@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useRef, useState } from "react";
 import {
   AlertTriangle,
   BadgeDollarSign,
@@ -51,8 +52,8 @@ import {
   THead,
   TR,
 } from "@/components/ui";
-import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { resolveMediaUrl } from "@/lib/media";
+import { OrderDrawer } from "@/components/orders/OrderDrawer";
 import { TagChips } from "./TagChips";
 import { CustomerTagPicker } from "./CustomerTagPicker";
 import {
@@ -62,7 +63,9 @@ import {
   CUSTOMERS_TAG_PERMISSION,
 } from "./permissions";
 
-const PAGE_SIZE = DEFAULT_PAGE_SIZE;
+// Embedded panel on a workspace page — a smaller default than the full-page orders list
+// (which uses DEFAULT_PAGE_SIZE = 20). The rows-per-page selector still offers 10/20/50.
+const PAGE_SIZE = 10;
 
 /**
  * Customer 360 profile (CUST) — the full-page DETAIL workspace on the Commerce
@@ -132,6 +135,30 @@ export function CustomerDetailView({ id }: { id: string }) {
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
   const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // An order in the history opens its detail as a drawer OVER this profile, driven by
+  // `?order=<no>` so the customer context is never lost (reload/shared link re-opens it,
+  // closing returns here — not the standalone orders list). Same OrderDrawer the orders
+  // list uses. The order-number links keep their canonical href for middle-click/new-tab.
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const openOrderNo = sp.get("order");
+
+  const openOrder = useCallback(
+    (orderNo: string) => {
+      const next = new URLSearchParams(sp.toString());
+      next.set("order", orderNo);
+      router.push(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [pathname, router, sp],
+  );
+  const closeOrder = useCallback(() => {
+    const next = new URLSearchParams(sp.toString());
+    next.delete("order");
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [pathname, router, sp]);
 
   // Screen is hidden for admins without customers.customer.read.
   if (ready && !can(CUSTOMERS_READ_PERMISSION)) {
@@ -400,7 +427,12 @@ export function CustomerDetailView({ id }: { id: string }) {
 
           {/* (2) ORDER HISTORY — paginated 10/page from the orders endpoint (by phone). */}
           {data.phone ? (
-            <CustomerOrderHistory customerId={data.id} phone={data.phone} name={name} />
+            <CustomerOrderHistory
+              customerId={data.id}
+              phone={data.phone}
+              name={name}
+              onOpenOrder={openOrder}
+            />
           ) : (
             <Card className="overflow-hidden">
               <div className="px-[18px] pb-3 pt-[15px]">
@@ -539,6 +571,13 @@ export function CustomerDetailView({ id }: { id: string }) {
           }
         }}
       />
+
+      {/* Order detail as a drawer OVER this profile (see openOrder/closeOrder). Keyed by
+          order no so switching rows remounts a fresh focus trap; closing drops `?order=`
+          and returns focus to the originating row, keeping the admin on this customer. */}
+      {openOrderNo && (
+        <OrderDrawer key={openOrderNo} orderNo={openOrderNo} onClose={closeOrder} />
+      )}
     </div>
   );
 }
@@ -704,7 +743,17 @@ function WishlistPanel({ customerId, count }: { customerId: string; count: numbe
   );
 }
 
-function CustomerOrderHistory({ customerId, phone, name }: { customerId: string; phone?: string | null; name: string }) {
+function CustomerOrderHistory({
+  customerId,
+  phone,
+  name,
+  onOpenOrder,
+}: {
+  customerId: string;
+  phone?: string | null;
+  name: string;
+  onOpenOrder: (orderNo: string) => void;
+}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   // Fetch by customer_id (authoritative for a registered buyer) — so linked orders show even when an
@@ -754,8 +803,16 @@ function CustomerOrderHistory({ customerId, phone, name }: { customerId: string;
               {orders.map((o) => (
                 <TR key={o.order_no}>
                   <TD>
+                    {/* Opens the detail as a drawer over THIS profile via ?order= (keeps the
+                        customer context; survives reload). The href stays the canonical detail
+                        path so middle-click / open-in-new-tab / copy-link still reach the full page. */}
                     <Link
                       href={`/admin/orders/${o.order_no}`}
+                      onClick={(e) => {
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                        e.preventDefault();
+                        onOpenOrder(o.order_no);
+                      }}
                       className="text-[13px] font-semibold tabular-nums text-accent-600 hover:text-accent-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
                     >
                       {o.order_no}

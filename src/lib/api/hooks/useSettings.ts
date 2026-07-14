@@ -54,6 +54,42 @@ export function useSavePaymentSettings() {
   });
 }
 
+// ---- MFA policy (mfa-2fa-admin-fe · GET/PUT /admin/settings/mfa) ----
+export const mfaPolicySchema = z.object({
+  sms_enabled: z.boolean().default(false),
+  email_enabled: z.boolean().default(true),
+  enforcement_mode: z.enum(["optional", "mandatory"]).default("optional"),
+  otp_ttl_seconds: z.number().default(300),
+  resend_cooldown_seconds: z.number().default(60),
+  max_attempts: z.number().default(5),
+  updated_by: z.string().nullable().optional(),
+  updated_at: z.string().optional(),
+});
+export type MfaPolicy = z.infer<typeof mfaPolicySchema>;
+/** The subset an admin can change (PUT body). */
+export type MfaPolicyUpdate = Partial<
+  Pick<
+    MfaPolicy,
+    "sms_enabled" | "email_enabled" | "enforcement_mode" | "otp_ttl_seconds" | "resend_cooldown_seconds" | "max_attempts"
+  >
+>;
+
+export function useMfaPolicy() {
+  return useQuery({
+    queryKey: ["admin-mfa-policy"] as const,
+    queryFn: (): Promise<MfaPolicy> => api.get("/admin/settings/mfa", { schema: mfaPolicySchema }) as Promise<MfaPolicy>,
+    staleTime: 60_000,
+  });
+}
+export function useSaveMfaPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: MfaPolicyUpdate) =>
+      api.put("/admin/settings/mfa", body as unknown as Record<string, unknown>, { schema: mfaPolicySchema }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-mfa-policy"] }),
+  });
+}
+
 // ---- Notification settings (notif-settings-fe) ----
 // Contract: GET/PUT /admin/notification-settings returns { sms, email } channel
 // configs (docs/api-contracts/09-notifications.md → Provider Settings). GET never

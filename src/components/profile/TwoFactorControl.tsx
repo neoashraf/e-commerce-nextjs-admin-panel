@@ -8,13 +8,12 @@ import { ApiError } from "@/lib/api/errors";
 /**
  * Own-2FA control (rbac-admin-profile-fe AC3/AC4). Enable reveals the channel;
  * SMS without a phone prompts to add one; the toggle flips only after server
- * confirmation. Disable requires the current password. A Super Admin's 2FA is
- * mandatory — locked on with an explanation.
+ * confirmation. Disable requires the current password. Every admin — including
+ * Super Admin — can turn their own 2FA on or off.
  */
 export function TwoFactorControl({ me }: { me: MeProfile }) {
   const update = useUpdateTwoFa();
   const enabled = me.two_fa_enabled ?? false;
-  const locked = me.is_super_admin ?? false;
 
   const [channel, setChannel] = useState<string>(me.two_fa_channel ?? "sms");
   const [password, setPassword] = useState("");
@@ -56,23 +55,20 @@ export function TwoFactorControl({ me }: { me: MeProfile }) {
           <p className="text-sm font-medium text-gray-900">Two-factor authentication</p>
           <p id="twofa-status" className="text-sm text-gray-500">
             {enabled ? `On — via ${me.two_fa_channel ?? channel}` : "Off"}
-            {locked && " · required for Super Admins"}
           </p>
         </div>
         <button
           type="button"
-          disabled={locked}
-          aria-describedby={locked ? "twofa-status" : undefined}
           onClick={() => { setShowForm((s) => !s); setError(null); setDone(null); }}
           className="inline-flex h-9 items-center rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
         >
-          {locked ? "Locked on" : enabled ? "Disable" : "Enable"}
+          {enabled ? "Disable" : "Enable"}
         </button>
       </div>
 
       {done && <p role="status" className="mt-2 text-sm text-green-700">{done}</p>}
 
-      {showForm && !locked && (
+      {showForm && (
         <div className="mt-4 space-y-3 rounded-md bg-gray-50 p-4">
           {!enabled && (
             <label className="block">

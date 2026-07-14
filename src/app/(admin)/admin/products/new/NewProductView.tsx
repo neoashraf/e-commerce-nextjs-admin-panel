@@ -22,9 +22,9 @@ export function NewProductView() {
   const hasPreset = !!presetType && !!presetFamily && !!presetSku;
 
   const { data: families } = useFamilies();
-  const [type, setType] = useState<"simple" | "configurable">("simple");
-  const [familyId, setFamilyId] = useState("");
-  const [sku, setSku] = useState("");
+  const [type, setType] = useState<"simple" | "configurable">(presetType ?? "simple");
+  const [familyId, setFamilyId] = useState(presetFamily);
+  const [sku, setSku] = useState(presetSku);
   const [started, setStarted] = useState(false);
 
   if (hasPreset) {

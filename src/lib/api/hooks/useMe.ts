@@ -5,8 +5,10 @@ import { api } from "@/lib/api/client";
 import {
   meProfileSchema,
   messageSchema,
+  twoFaConfirmSchema,
   twoFaUpdateSchema,
   type MeProfile,
+  type TwoFaUpdateResult,
 } from "@/lib/api/schemas/me";
 
 /**
@@ -44,8 +46,24 @@ export function useChangePassword() {
 export function useUpdateTwoFa() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { enabled: boolean; channel?: string; current_password: string }) =>
-      api.patch("/admin/me/2fa", body, { schema: twoFaUpdateSchema }),
+    // Email-only (contract 16 v0.2): no channel. `code` = fresh emailed code for the
+    // disable path when the session is not 2FA-verified (FR-RBAC-009).
+    mutationFn: (body: {
+      enabled: boolean;
+      current_password: string;
+      code?: string;
+    }): Promise<TwoFaUpdateResult> =>
+      api.patch("/admin/me/2fa", body, { schema: twoFaUpdateSchema }) as Promise<TwoFaUpdateResult>,
+    onSuccess: () => qc.invalidateQueries({ queryKey: meKeys.profile }),
+  });
+}
+
+export function useConfirmTwoFa() {
+  const qc = useQueryClient();
+  return useMutation({
+    // POST /admin/me/2fa/confirm — activates 2FA (FR-RBAC-008); other sessions revoked.
+    mutationFn: (body: { challenge_id: string; code: string }) =>
+      api.post("/admin/me/2fa/confirm", body, { schema: twoFaConfirmSchema }),
     onSuccess: () => qc.invalidateQueries({ queryKey: meKeys.profile }),
   });
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http, HttpResponse } from "msw";
+import { http, HttpResponse, delay } from "msw";
 import { server, API } from "@/test/server";
 import { renderWithProviders, seedPermissions } from "@/test/render";
 import { CustomerDetailView } from "@/components/customers/CustomerDetailView";
@@ -61,12 +61,22 @@ const CUSTOMER = {
   tags: [],
 };
 
-/** Captures the query params the order-history panel requests. */
-let ordersQuery: URLSearchParams;
+/** Captures the query params of every order-history request, newest last. */
+let ordersQueries: URLSearchParams[];
+/** The params of the most recent order-history request. */
+const lastOrdersQuery = () => ordersQueries[ordersQueries.length - 1];
 
-function seedHandlers(orderNo = "SO-100024") {
-  ordersQuery = new URLSearchParams();
-  server.use(
+const buildOrder = (orderNo: string) => ({
+  order_no: orderNo,
+  customer: { name: "Rakib Demo", phone: "+8801711000001" },
+  status: "confirmed",
+  grand_total: "4570.00",
+  placed_at: "2026-06-11T17:22:00Z",
+});
+
+/** The always-present profile sub-resource handlers (not under test here). */
+function profileHandlers() {
+  return [
     http.get(`${API}/admin/customers/${CUSTOMER_ID}`, () =>
       HttpResponse.json({ data: CUSTOMER }),
     ),
@@ -76,22 +86,40 @@ function seedHandlers(orderNo = "SO-100024") {
     http.get(`${API}/admin/customers/${CUSTOMER_ID}/wishlist`, () =>
       HttpResponse.json({ data: [] }),
     ),
+  ];
+}
+
+/**
+ * Seeds the profile + an order-history page. `total` drives pagination (rows are
+ * generated per requested page/limit) so page + rows-per-page changes are observable
+ * through the params the panel sends.
+ */
+function seedHandlers({
+  orderNo = "SO-100024",
+  total = 1,
+}: { orderNo?: string; total?: number } = {}) {
+  ordersQueries = [];
+  server.use(
+    ...profileHandlers(),
     http.get(`${API}/admin/orders`, ({ request }) => {
-      ordersQuery = new URL(request.url).searchParams;
-      return HttpResponse.json({
-        data: [
-          {
-            order_no: orderNo,
-            customer: { name: "Rakib Demo", phone: "+8801711000001" },
-            status: "confirmed",
-            grand_total: "4570.00",
-            placed_at: "2026-06-11T17:22:00Z",
-          },
-        ],
-        meta: { page: 1, limit: 10, total: 1 },
-      });
+      const q = new URL(request.url).searchParams;
+      ordersQueries.push(q);
+      const page = Number(q.get("page") ?? 1);
+      const limit = Number(q.get("limit") ?? 10);
+      const count = Math.max(0, Math.min(limit, total - (page - 1) * limit));
+      // Page 1 leads with the fixed order number the assertions click on.
+      const rows = Array.from({ length: count }, (_, i) =>
+        buildOrder(page === 1 && i === 0 ? orderNo : `SO-2${page}00${i}`),
+      );
+      return HttpResponse.json({ data: rows, meta: { page, limit, total } });
     }),
   );
+}
+
+/** Seeds the profile with an order-history endpoint in a non-loaded state. */
+function seedOrdersState(responder: Parameters<typeof http.get>[1]) {
+  ordersQueries = [];
+  server.use(...profileHandlers(), http.get(`${API}/admin/orders`, responder));
 }
 
 beforeEach(() => {
@@ -107,8 +135,8 @@ describe("CUST — CustomerDetailView order drawer (in-context)", () => {
 
     // Wait until the order row (proof the orders request resolved) is on screen.
     expect(await screen.findByRole("link", { name: "SO-100024" })).toBeInTheDocument();
-    expect(ordersQuery.get("customer_id")).toBe(CUSTOMER_ID);
-    expect(ordersQuery.get("limit")).toBe("10");
+    expect(lastOrdersQuery().get("customer_id")).toBe(CUSTOMER_ID);
+    expect(lastOrdersQuery().get("limit")).toBe("10");
   });
 
   it("opens an order as a drawer over the profile (?order=) instead of navigating away", async () => {
@@ -161,5 +189,152 @@ describe("CUST — CustomerDetailView order drawer (in-context)", () => {
     );
     // Never routes to the standalone orders list on close.
     expect(nav.push).not.toHaveBeenCalledWith("/admin/orders", expect.anything());
+  });
+
+  it("does not render a drawer when the profile URL has no ?order=", async () => {
+    seedHandlers();
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    expect(await screen.findByRole("link", { name: "SO-100024" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("leaves a modified click (⌘/Ctrl) to the browser so the order still opens in a new tab", async () => {
+    const user = userEvent.setup();
+    seedHandlers();
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    const orderLink = await screen.findByRole("link", { name: "SO-100024" });
+    await user.keyboard("{Control>}");
+    await user.click(orderLink);
+    await user.keyboard("{/Control}");
+
+    // The in-context drawer is for plain clicks only — a modified click keeps the
+    // canonical /admin/orders/{no} href the browser handles itself.
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the profile's other query params when opening the drawer", async () => {
+    const user = userEvent.setup();
+    nav.search = "tab=notes";
+    seedHandlers();
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    await user.click(await screen.findByRole("link", { name: "SO-100024" }));
+
+    expect(nav.push).toHaveBeenCalledWith(
+      `${PROFILE_PATH}?tab=notes&order=SO-100024`,
+      expect.objectContaining({ scroll: false }),
+    );
+  });
+
+  it("drops only `order` from the URL when closing the drawer", async () => {
+    const user = userEvent.setup();
+    nav.search = "tab=notes&order=SO-100024";
+    seedHandlers();
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    await user.click(await screen.findByRole("button", { name: "Close" }));
+
+    await waitFor(() =>
+      expect(nav.push).toHaveBeenCalledWith(
+        `${PROFILE_PATH}?tab=notes`,
+        expect.objectContaining({ scroll: false }),
+      ),
+    );
+  });
+});
+
+describe("CUST — CustomerDetailView order history pagination", () => {
+  it("offers 10 / 20 / 50 rows per page with 10 selected by default", async () => {
+    seedHandlers({ total: 25 });
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    const select = await screen.findByRole("combobox", { name: "Rows per page" });
+    expect(select).toHaveValue("10");
+    const offered = Array.from(select.querySelectorAll("option")).map((o) => o.value);
+    expect(offered).toEqual(expect.arrayContaining(["10", "20", "50"]));
+  });
+
+  it("resets to page 1 when the rows-per-page size changes", async () => {
+    const user = userEvent.setup();
+    seedHandlers({ total: 25 });
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    // Go to page 2 of the 10-per-page history…
+    await user.click(await screen.findByRole("button", { name: "Page 2" }));
+    await waitFor(() => expect(lastOrdersQuery().get("page")).toBe("2"));
+
+    // …then widen the page size: the panel must re-request from page 1, not page 2
+    // (page 2 of 20-per-page would be empty for a 25-order customer).
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Rows per page" }),
+      "20",
+    );
+    await waitFor(() => expect(lastOrdersQuery().get("limit")).toBe("20"));
+    expect(lastOrdersQuery().get("page")).toBe("1");
+  });
+});
+
+describe("CUST — CustomerDetailView order history states", () => {
+  it("shows neither the empty nor the error state while the history is loading", async () => {
+    seedOrdersState(async () => {
+      await delay("infinite");
+      return HttpResponse.json({ data: [], meta: { page: 1, limit: 10, total: 0 } });
+    });
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    // The profile itself has loaded around the still-pending history panel.
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Rakib Demo" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No orders yet")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("shows the empty state when the customer has no orders", async () => {
+    seedHandlers({ total: 0 });
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    expect(await screen.findByText("No orders yet")).toBeInTheDocument();
+    expect(
+      screen.getByText("This customer hasn’t placed any orders."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows a non-blocking error with Retry when the history fails, and recovers", async () => {
+    const user = userEvent.setup();
+    let attempt = 0;
+    seedOrdersState(({ request }) => {
+      ordersQueries.push(new URL(request.url).searchParams);
+      attempt += 1;
+      if (attempt === 1) return new HttpResponse(null, { status: 500 });
+      return HttpResponse.json({
+        data: [buildOrder("SO-100024")],
+        meta: { page: 1, limit: 10, total: 1 },
+      });
+    });
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    expect(await screen.findByText("Couldn’t load orders.")).toBeInTheDocument();
+    // Non-blocking: the rest of the profile is still usable.
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Rakib Demo" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("link", { name: "SO-100024" })).toBeInTheDocument();
+  });
+
+  it("hides the whole profile from an admin without customers.customer.read", async () => {
+    seedPermissions([]);
+    seedHandlers();
+    renderWithProviders(<CustomerDetailView id={CUSTOMER_ID} />);
+
+    expect(await screen.findByText("No access to this customer")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "SO-100024" })).not.toBeInTheDocument();
   });
 });

@@ -158,7 +158,7 @@ export function useUploadCategoryImage(id: string) {
  * does NOT renumber the rest of the group (update-category.use-case.ts), so
  * sending only the moved node's position collides with an existing one and the
  * tree (ordered by `position ASC`) doesn't actually move. We therefore renumber
- * the WHOLE group to a clean 1..N sequence and PATCH every sibling whose
+ * the WHOLE group to a clean 0..N-1 sequence and PATCH every sibling whose
  * position changed. Optimistically reorders the cached tree so the row moves
  * instantly; on any failure the cache is rolled back and the tree refetched.
  *
@@ -170,10 +170,11 @@ export function useReorderCategory(includeDeleted = false) {
   const queryKey = catalogKeys.categoryTree(includeDeleted);
 
   return useMutation({
-    // Renumber the whole group to a clean 1..N so positions never collide. PATCH
+    // Renumber the whole group to a clean 0..N-1 so positions never collide. PATCH
     // every sibling (a group is small); the BE writes the raw position each gets.
+    // Positions are 0-based (BE appends at COALESCE(MAX(position), -1) + 1).
     mutationFn: async ({ orderedIds }: { parentId: string | null; orderedIds: string[] }) => {
-      await Promise.all(orderedIds.map((id, idx) => api.patch(`/admin/categories/${id}`, { position: idx + 1 })));
+      await Promise.all(orderedIds.map((id, idx) => api.patch(`/admin/categories/${id}`, { position: idx })));
     },
     onMutate: async ({ parentId, orderedIds }) => {
       await qc.cancelQueries({ queryKey });
@@ -192,7 +193,7 @@ export function useReorderCategory(includeDeleted = false) {
 
 /**
  * Return a copy of `tree` with the children of `parentId` reordered to match
- * `orderedIds` and their `position` renumbered 1..N (mirrors the BE write).
+ * `orderedIds` and their `position` renumbered 0..N-1 (mirrors the BE write).
  */
 function reorderTreeGroup(tree: CategoryNode[], parentId: string | null, orderedIds: string[]): CategoryNode[] {
   const apply = (siblings: CategoryNode[]): CategoryNode[] => {
@@ -200,7 +201,7 @@ function reorderTreeGroup(tree: CategoryNode[], parentId: string | null, ordered
     // Keep any sibling missing from orderedIds (e.g. a filtered-out deleted node) in place.
     const ordered = orderedIds.map((id) => byId.get(id)).filter((s): s is CategoryNode => !!s);
     const extras = siblings.filter((s) => !orderedIds.includes(s.id));
-    return [...ordered, ...extras].map((s, idx) => ({ ...s, position: idx + 1 }));
+    return [...ordered, ...extras].map((s, idx) => ({ ...s, position: idx }));
   };
 
   if (parentId === null) return apply(tree);

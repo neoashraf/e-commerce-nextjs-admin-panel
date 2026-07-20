@@ -199,7 +199,9 @@ export function CategoriesView() {
       setTarget(null);
     } catch (err) {
       if (err instanceof ApiError && err.code === "CATEGORY_HAS_DEPENDENTS") {
-        const d = (err.details?.[0] as unknown as { child_categories?: number; published_products?: number }) ?? {};
+        // The 409 payload is an object-shaped `error.details`, which the client
+        // parses into `ApiError.context` (not the field-error `details` array).
+        const d = (err.context ?? {}) as { child_categories?: number; published_products?: number };
         setBlocked({
           name: target.name,
           children: d.child_categories ?? 0,
@@ -682,22 +684,26 @@ function CategoryRow({
       {/* ACTIONS: ••• menu (Edit lives at the top of the dropdown) */}
       <td className="relative w-[118px] pr-3.5 text-right align-middle" onClick={(e) => e.stopPropagation()}>
         {!isDeleted && (
-          <div className="inline-flex items-center justify-end">
-            <button
-              ref={triggerRef}
-              type="button"
-              onClick={() => onMenuOpen(node.id)}
-              aria-label={`More actions for ${node.name}`}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              className={
-                "inline-flex h-[30px] w-[30px] items-center justify-center rounded-md text-text-secondary hover:bg-surface-subtle " +
-                (menuOpen ? "bg-surface-subtle" : "")
-              }
-            >
-              <MoreHorizontal className="h-[18px] w-[18px]" />
-            </button>
-          </div>
+          // Only shown when the admin has at least one write action to perform;
+          // a read-only admin sees no ••• trigger (the menu would be empty).
+          <Can anyOf={["catalog.category.update", "catalog.category.create", "catalog.category.delete"]}>
+            <div className="inline-flex items-center justify-end">
+              <button
+                ref={triggerRef}
+                type="button"
+                onClick={() => onMenuOpen(node.id)}
+                aria-label={`More actions for ${node.name}`}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                className={
+                  "inline-flex h-[30px] w-[30px] items-center justify-center rounded-md text-text-secondary hover:bg-surface-subtle " +
+                  (menuOpen ? "bg-surface-subtle" : "")
+                }
+              >
+                <MoreHorizontal className="h-[18px] w-[18px]" />
+              </button>
+            </div>
+          </Can>
         )}
 
         {menuOpen && (

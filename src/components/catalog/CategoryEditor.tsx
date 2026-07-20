@@ -180,9 +180,10 @@ export function CategoryEditor({
   }, [parentId, parentOptions]);
   const childLevel = parentLevel + 1;
   const depthError = childLevel > 3;
-  const levelPreview = !parentId
-    ? "This will be a top-level (level 1) category."
-    : `This will be a level-${childLevel} category.`;
+  // Uniform "level-N" preview per the design spec (category-editor.md): no parent
+  // ⇒ level 1 (childLevel = parentLevel(0) + 1). The "top-level" hint lives in the
+  // adjacent helper copy.
+  const levelPreview = `This will be a level-${childLevel} category`;
 
   const nameValid = name.trim().length >= 2 && name.trim().length <= 120;
   const nameError = nameTouched && !nameValid;
@@ -308,6 +309,12 @@ export function CategoryEditor({
       router.push("/admin/categories");
     } catch (err) {
       if (err instanceof ApiError && err.status === 400) {
+        // Depth backstop: map the BE's code to the same inline copy the client-side
+        // guard uses (design category-editor.md), not the raw server message.
+        if (err.code === "MAX_DEPTH_EXCEEDED") {
+          setError("Categories can be nested up to 3 levels deep.");
+          return;
+        }
         // Surface the backend's specific reason (e.g. UNKNOWN_OPTION → which
         // attribute code) instead of swallowing it behind generic copy.
         const fields = err.details
@@ -386,6 +393,7 @@ export function CategoryEditor({
                 <span className={cn(labelCls, "mb-1.5")}>Parent category</span>
                 <div className="relative">
                   <select
+                    aria-label="Parent category"
                     className={cn(
                       "h-[38px] w-full appearance-none rounded-lg border bg-surface pl-3 pr-9 text-sm font-medium text-text outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1",
                       depthError ? "border-error" : "border-border-strong",

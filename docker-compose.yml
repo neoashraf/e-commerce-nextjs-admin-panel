@@ -3,15 +3,16 @@
 #
 #   docker compose up --build
 #
-# Listens on 3002 to avoid clashing with the backend (3001) and storefront (3000).
+# Host port is fixed at 6002 across both servers (backend uses 6001, storefront 6003).
 # NEXT_PUBLIC_* are baked at build time, so changing them requires a rebuild.
 services:
   admin:
     build:
       context: .
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:6001/api/v1}
     image: sports-ecom/admin:local
+    container_name: sports-ecommerce-admin
     ports:
-      - "3002:3002"
+      - "6002:3002"
     restart: unless-stopped

@@ -9,6 +9,7 @@ import { toast } from "@/lib/stores/toast";
 import { Button, Card, Switch } from "@/components/ui";
 
 type Enforcement = "optional" | "mandatory";
+type DefaultChannel = "email" | "sms";
 
 /**
  * MFA policy settings (mfa-2fa-admin-fe · docs/design/screens/17-mfa/mfa-policy-settings.md).
@@ -24,6 +25,7 @@ export function MfaSettingsView() {
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [enforcement, setEnforcement] = useState<Enforcement>("optional");
+  const [defaultChannel, setDefaultChannel] = useState<DefaultChannel>("email");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [otpTtl, setOtpTtl] = useState(300);
   const [cooldown, setCooldown] = useState(60);
@@ -35,6 +37,7 @@ export function MfaSettingsView() {
     setSmsEnabled(data.sms_enabled);
     setEmailEnabled(data.email_enabled);
     setEnforcement(data.enforcement_mode);
+    setDefaultChannel(data.default_channel);
     setOtpTtl(data.otp_ttl_seconds);
     setCooldown(data.resend_cooldown_seconds);
     setMaxAttempts(data.max_attempts);
@@ -42,6 +45,8 @@ export function MfaSettingsView() {
 
   // FR-MFA-031: mandatory 2FA with no channel would lock every customer out.
   const noChannelGuard = enforcement === "mandatory" && !smsEnabled && !emailEnabled;
+  // FR-MFA-036: the default channel must reference a channel enabled in the same form.
+  const defaultDisabledGuard = defaultChannel === "sms" ? !smsEnabled : !emailEnabled;
 
   async function onSave() {
     setError(null);
@@ -49,11 +54,16 @@ export function MfaSettingsView() {
       setError("Mandatory two-factor needs at least one channel (SMS or email) enabled.");
       return;
     }
+    if (defaultDisabledGuard) {
+      setError("The default channel must be one that's enabled above.");
+      return;
+    }
     try {
       await save.mutateAsync({
         sms_enabled: smsEnabled,
         email_enabled: emailEnabled,
         enforcement_mode: enforcement,
+        default_channel: defaultChannel,
         otp_ttl_seconds: otpTtl,
         resend_cooldown_seconds: cooldown,
         max_attempts: maxAttempts,
@@ -61,7 +71,13 @@ export function MfaSettingsView() {
       toast("MFA policy updated.");
     } catch (err) {
       if (err instanceof ApiError && err.code === "MFA_NO_CHANNEL") {
-        setError("Mandatory two-factor needs at least one channel (SMS or email) enabled.");
+        // Server groups both rules under MFA_NO_CHANNEL (contract 17): no-channel-when-
+        // mandatory, or default_channel referencing a disabled channel (a save race).
+        setError(
+          /default/i.test(err.message)
+            ? "The default channel must be one that's enabled above."
+            : "Mandatory two-factor needs at least one channel (SMS or email) enabled.",
+        );
       } else if (err instanceof ApiError && err.status === 403) {
         setError("You don't have permission to change this.");
       } else {
@@ -122,6 +138,48 @@ export function MfaSettingsView() {
                   <Switch label="SMS channel" checked={smsEnabled} onChange={setSmsEnabled} />
                 </div>
               </div>
+            </div>
+          </Card>
+
+          {/* Default channel (FR-MFA-036) */}
+          <Card>
+            <div className="p-4">
+              <h2 className="text-sm font-semibold text-text">Default channel</h2>
+              <p className="mt-0.5 text-xs text-text-muted">
+                First code goes here when a customer has BOTH channels verified and no saved
+                preference. Resolution order: customer preference → this default → the only
+                eligible channel.
+              </p>
+              <div className="mt-3 flex gap-5">
+                {(
+                  [
+                    { v: "email", t: "Email", off: !emailEnabled },
+                    { v: "sms", t: "SMS", off: !smsEnabled },
+                  ] as { v: DefaultChannel; t: string; off: boolean }[]
+                ).map((o) => (
+                  <label
+                    key={o.v}
+                    className={`flex items-center gap-2 text-sm ${o.off ? "cursor-not-allowed text-text-muted" : "cursor-pointer text-text"}`}
+                  >
+                    <input
+                      type="radio"
+                      name="default-channel"
+                      value={o.v}
+                      checked={defaultChannel === o.v}
+                      disabled={o.off}
+                      onChange={() => setDefaultChannel(o.v)}
+                      className="h-4 w-4 text-accent-600 focus:ring-accent-600 disabled:opacity-50"
+                    />
+                    {o.t}
+                    {o.off && <span className="text-xs text-text-muted">(channel disabled)</span>}
+                  </label>
+                ))}
+              </div>
+              {defaultDisabledGuard && (
+                <p role="alert" className="mt-3 rounded-md bg-error/10 px-3 py-2 text-xs text-error">
+                  The default channel must be one that&apos;s enabled above.
+                </p>
+              )}
             </div>
           </Card>
 
@@ -191,7 +249,7 @@ export function MfaSettingsView() {
               {data?.updated_at && ` Last updated ${new Date(data.updated_at).toLocaleString("en-GB")}.`}
             </p>
             <Can permission="settings.setting.update">
-              <Button onClick={onSave} loading={save.isPending} disabled={noChannelGuard}>
+              <Button onClick={onSave} loading={save.isPending} disabled={noChannelGuard || defaultDisabledGuard}>
                 Save changes
               </Button>
             </Can>

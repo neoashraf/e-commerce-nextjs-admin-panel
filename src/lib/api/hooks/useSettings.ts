@@ -59,6 +59,8 @@ export const mfaPolicySchema = z.object({
   sms_enabled: z.boolean().default(false),
   email_enabled: z.boolean().default(true),
   enforcement_mode: z.enum(["optional", "mandatory"]).default("optional"),
+  /** First-attempt channel for both-eligible, no-preference customers (FR-MFA-036). */
+  default_channel: z.enum(["email", "sms"]).default("email"),
   otp_ttl_seconds: z.number().default(300),
   resend_cooldown_seconds: z.number().default(60),
   max_attempts: z.number().default(5),
@@ -70,7 +72,7 @@ export type MfaPolicy = z.infer<typeof mfaPolicySchema>;
 export type MfaPolicyUpdate = Partial<
   Pick<
     MfaPolicy,
-    "sms_enabled" | "email_enabled" | "enforcement_mode" | "otp_ttl_seconds" | "resend_cooldown_seconds" | "max_attempts"
+    "sms_enabled" | "email_enabled" | "enforcement_mode" | "default_channel" | "otp_ttl_seconds" | "resend_cooldown_seconds" | "max_attempts"
   >
 >;
 
